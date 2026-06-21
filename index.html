@@ -396,6 +396,17 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
       </div>
     </div>
     <div class="card">
+      <div class="card-head"><div class="card-head-title">&#9878; Outsourced Item Tracker (Uniforms & Swimming)</div></div>
+      <div class="card-body" style="padding:0">
+        <div style="font-size:12px;color:var(--text3);padding:12px 18px 0">Money collected from parents vs. money paid out to the supplier/facility, for items the school doesn't provide itself.</div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Item</th><th class="td-right">Collected from Parents</th><th class="td-right">Paid to Supplier/Facility</th><th class="td-right">Net</th></tr></thead>
+          <tbody id="oi-passthrough-body"></tbody>
+        </table></div>
+        <div id="oi-passthrough-detail" style="padding:12px 18px"></div>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-head"><div class="card-head-title">Sundry Income Log</div>
         <div style="display:flex;gap:8px"><select id="oi-f-stream" onchange="renderOILog()" style="height:28px;font-size:12px"><option value="">All streams</option></select>
         <button class="btn btn-success btn-xs" onclick="exportOICSV()">&#8681; Export</button></div>
@@ -418,17 +429,30 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
           <div class="card-body">
             <div class="form-grid fg-2" style="margin-bottom:10px">
               <div class="form-group"><label class="lbl" for="ex-cat">Category</label>
-                <select id="ex-cat">
+                <select id="ex-cat" onchange="exToggleSubFields()">
                   <option>Stationery & Supplies</option><option>Utilities (Water/Electricity)</option>
                   <option>Cleaning & Sanitation</option><option>Food & Catering</option>
                   <option>Transport</option><option>Repairs & Maintenance</option>
                   <option>Printing & Photocopying</option><option>Bank Charges</option>
                   <option>Examination Fees</option><option>Sports & Games</option>
                   <option>Staff Welfare</option><option>Communication</option>
-                  <option>Rent / Premises</option><option>Other</option>
+                  <option>Rent / Premises</option>
+                  <option>Uniforms (Supplier Payment)</option>
+                  <option>Swimming (Facility/Teacher Payment)</option>
+                  <option>Other</option>
                 </select>
               </div>
               <div class="form-group"><label class="lbl" for="ex-amt">Amount (UGX)</label><input id="ex-amt" type="number" placeholder="e.g. 120000"></div>
+            </div>
+            <div class="form-grid fg-2" id="ex-uniform-fields" style="display:none;margin-bottom:10px">
+              <div class="form-group"><label class="lbl" for="ex-uniform-item">Uniform item</label>
+                <select id="ex-uniform-item"><option value="Shirt">Shirt</option><option value="Short">Short</option><option value="Dress">Dress</option><option value="Socks">Socks</option><option value="Tie">Tie</option><option value="Other">Other</option></select>
+              </div>
+            </div>
+            <div class="form-grid fg-2" id="ex-swimming-fields" style="display:none;margin-bottom:10px">
+              <div class="form-group"><label class="lbl" for="ex-swimming-type">Swimming expense type</label>
+                <select id="ex-swimming-type"><option value="Facility Charge">Facility Charge</option><option value="Teacher Allowance">Teacher Allowance</option></select>
+              </div>
             </div>
             <div class="form-grid fg-2" style="margin-bottom:10px">
               <div class="form-group"><label class="lbl" for="ex-date">Date</label><input id="ex-date" type="date"></div>
@@ -727,7 +751,7 @@ let DB = {
 function mapStudent(r) { return { id: r.id, name: r.name, class: r.class, expected: Number(r.expected_fees) }; }
 function mapFeeReceipt(r) { return { id: r.id, studentId: r.student_id, studentName: r.students ? r.students.name : '', amt: Number(r.amount), date: r.payment_date, rcptNo: r.receipt_no || '', note: r.note || '', method: r.method }; }
 function mapOtherIncome(r) { return { id: r.id, stream: r.stream, studentId: r.student_id, studentName: r.students ? r.students.name : '', amt: Number(r.amount), date: r.payment_date, rcptNo: r.receipt_no || '', note: r.note || '', method: r.method }; }
-function mapExpense(r) { return { id: r.id, cat: r.category, amt: Number(r.amount), date: r.expense_date, ref: r.ref || '', desc: r.description, payee: r.payee || '', method: r.method }; }
+function mapExpense(r) { return { id: r.id, cat: r.category, amt: Number(r.amount), date: r.expense_date, ref: r.ref || '', desc: r.description, payee: r.payee || '', method: r.method, uniformItem: r.uniform_item || '', swimmingType: r.swimming_expense_type || '' }; }
 function mapStaff(r) { return { id: r.id, name: r.name, role: r.role, salary: Number(r.salary), allowance: Number(r.allowance), phone: r.phone || '', nin: r.nin || '', joined: r.date_joined }; }
 function mapSalaryPayment(r) { return { id: r.id, staffId: r.staff_id, staffName: r.staff ? r.staff.name : '', month: r.month, date: r.payment_date, gross: Number(r.gross), advDeducted: Number(r.advance_deducted), net: Number(r.net), method: r.method }; }
 function mapAdvance(r) { return { id: r.id, staffId: r.staff_id, staffName: r.staff ? r.staff.name : '', amt: Number(r.amount), date: r.advance_date, months: r.months, reason: r.reason || '', repaid: Number(r.repaid), method: r.method }; }
@@ -1080,7 +1104,7 @@ async function goPage(id) {
   try {
     if (id === 'dashboard') renderDashboard();
     if (id === 'fees') { renderFeesAudit(); renderReceiptLog2(); populateClassFilter(); }
-    if (id === 'other-income') { renderOILog(); renderOISummary(); populateOIStreamFilter(); }
+    if (id === 'other-income') { renderOILog(); renderOISummary(); populateOIStreamFilter(); renderOIPassThrough(); }
     if (id === 'expenses') { renderExpLog(); renderExpSummary(); populateExpCatFilter(); }
     if (id === 'staff') renderStaffList();
     if (id === 'payroll') { populatePayrollStaff(); renderAdvOutstanding(); renderPayHistory(); }
@@ -1507,7 +1531,7 @@ async function recordOtherIncome() {
     await refreshCashbookTotals(date);
     ['oi-amt','oi-student','oi-rcptno','oi-note'].forEach(id => document.getElementById(id).value = '');
     msg.innerHTML = '<div class="msg msg-ok">&#10003; Recorded ' + stream + ' for ' + student.name + ': UGX ' + fmt(amt) + '</div>';
-    save(); renderOILog(); renderOISummary(); updateStats();
+    save(); renderOILog(); renderOISummary(); renderOIPassThrough(); updateStats();
   } catch (err) {
     msg.innerHTML = '<div class="msg msg-err">Could not save: ' + err.message + '</div>';
   }
@@ -1561,6 +1585,45 @@ function renderOISummary() {
   }).join('') + `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px;display:flex;justify-content:space-between;font-weight:700;font-size:13px"><span>TOTAL</span><span>UGX ${fmt(total)}</span></div>`;
 }
 
+// Pulls live from the database views (sundry_stream_summary, uniform_item_summary,
+// swimming_expense_summary) rather than recomputing locally, so it always matches
+// exactly what's actually stored — see migration_pass_through_expenses.sql.
+async function renderOIPassThrough() {
+  const body = document.getElementById('oi-passthrough-body');
+  const detail = document.getElementById('oi-passthrough-detail');
+  if (!body) return;
+  const [streamRes, uniformRes, swimRes] = await Promise.all([
+    sb.from('sundry_stream_summary').select('*').in('stream_name', ['Uniform', 'Swimming']),
+    sb.from('uniform_item_summary').select('*'),
+    sb.from('swimming_expense_summary').select('*'),
+  ]);
+  if (streamRes.error) { body.innerHTML = '<tr><td colspan="4" class="empty">Could not load report: ' + streamRes.error.message + '</td></tr>'; return; }
+  const rows = streamRes.data || [];
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No uniform or swimming income recorded yet.</td></tr>'; detail.innerHTML = ''; return; }
+  body.innerHTML = rows.map(r => {
+    const net = Number(r.net);
+    return `<tr>
+      <td style="font-weight:600">${r.stream_name}</td>
+      <td class="td-right" style="color:var(--green)">UGX ${fmt(r.income_total)} <span style="color:var(--text3);font-size:11px">(${r.income_count})</span></td>
+      <td class="td-right" style="color:var(--red)">UGX ${fmt(r.expense_total)} <span style="color:var(--text3);font-size:11px">(${r.expense_count})</span></td>
+      <td class="td-right" style="font-weight:700;color:${net<0?'var(--red)':'var(--green)'}">UGX ${fmt(net)} ${net<0?'(shortfall)':''}</td>
+    </tr>`;
+  }).join('');
+
+  // Breakdown detail below the table: what uniform items were bought, and the
+  // swimming facility-vs-allowance split — both straight from the views.
+  let detailHtml = '';
+  if (uniformRes.data && uniformRes.data.length) {
+    detailHtml += '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">Uniform items purchased</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">' +
+      uniformRes.data.map(u => `<span class="badge badge-navy" style="font-size:11px">${u.item}: ${u.purchase_count} purchase${u.purchase_count==1?'':'s'}, UGX ${fmt(u.total_spent)}</span>`).join('') + '</div>';
+  }
+  if (swimRes.data && swimRes.data.length) {
+    detailHtml += '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">Swimming expense split</div><div style="display:flex;flex-wrap:wrap;gap:8px">' +
+      swimRes.data.map(s => `<span class="badge badge-gold" style="font-size:11px">${s.expense_type}: UGX ${fmt(s.total_spent)}</span>`).join('') + '</div>';
+  }
+  detail.innerHTML = detailHtml;
+}
+
 // ============================================================
 // EXPENSES
 // ============================================================
@@ -1573,14 +1636,17 @@ async function recordExpense() {
   const payee = document.getElementById('ex-payee').value.trim();
   const method = document.getElementById('ex-method').value;
   const msg = document.getElementById('ex-msg');
+  const uniformItem = cat === 'Uniforms (Supplier Payment)' ? document.getElementById('ex-uniform-item').value : null;
+  const swimmingType = cat === 'Swimming (Facility/Teacher Payment)' ? document.getElementById('ex-swimming-type').value : null;
   if (isNaN(amt) || amt <= 0) { msg.innerHTML = '<div class="msg msg-err">Enter a valid amount.</div>'; return; }
   if (!desc) { msg.innerHTML = '<div class="msg msg-err">Enter a description.</div>'; return; }
   const day = DB.cashbookDays[date];
   if (day && day.status === 'closed') { msg.innerHTML = '<div class="msg msg-err">That day\'s cashbook is closed. Reopen it from the Daily Cashbook page to add entries for ' + date + '.</div>'; return; }
   try {
-    const row = await sbInsert('expenses', { category: cat, amount: amt, expense_date: date, ref: ref || null, description: desc, payee: payee || null, method });
+    const row = await sbInsert('expenses', { category: cat, amount: amt, expense_date: date, ref: ref || null, description: desc, payee: payee || null, method, uniform_item: uniformItem, swimming_expense_type: swimmingType });
     DB.expenses.push(mapExpense(row));
-    await cbLogExpense(date, cat + (payee ? ' — ' + payee : ''), amt, method, ref);
+    const logDesc = cat + (uniformItem ? ' — ' + uniformItem : '') + (swimmingType ? ' — ' + swimmingType : '') + (payee ? ' — ' + payee : '');
+    await cbLogExpense(date, logDesc, amt, method, ref);
     await refreshCashbookTotals(date);
     ['ex-amt','ex-ref','ex-desc','ex-payee'].forEach(id => document.getElementById(id).value = '');
     msg.innerHTML = '<div class="msg msg-ok">&#10003; Recorded: ' + cat + ' — UGX ' + fmt(amt) + '</div>';
@@ -1588,6 +1654,11 @@ async function recordExpense() {
   } catch (err) {
     msg.innerHTML = '<div class="msg msg-err">Could not save: ' + err.message + '</div>';
   }
+}
+function exToggleSubFields() {
+  const cat = document.getElementById('ex-cat').value;
+  document.getElementById('ex-uniform-fields').style.display = cat === 'Uniforms (Supplier Payment)' ? 'grid' : 'none';
+  document.getElementById('ex-swimming-fields').style.display = cat === 'Swimming (Facility/Teacher Payment)' ? 'grid' : 'none';
 }
 
 function renderExpLog(q) {
