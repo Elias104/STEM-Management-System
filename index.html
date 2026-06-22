@@ -728,7 +728,15 @@ const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_AIUkLJPjpmfQgerZZj0h2w_tP3a_4Fn
 let sb;
 try {
   if (typeof supabase === 'undefined') throw new Error('Supabase library did not load. Check your internet connection and reload the page.');
-  sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      persistSession: true,
+      storageKey: 'stem-auth',
+      storage: window.localStorage,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    }
+  });
 } catch (e) {
   // Show a visible error on the lock screen so the user isn't left staring
   // at a frozen button with no explanation.
@@ -2125,10 +2133,20 @@ document.getElementById('cb-date-picker').value = today();
 
 // ── Idle auto-lock: 30 minutes — signs the person out for real ──
 let _idleTimer = null;
+let _sessionLocked = false; // screen is locked but session is still alive
 const IDLE_MS = 30 * 60 * 1000;
 function resetIdleTimer() {
+  if (_sessionLocked) return; // don't reset while locked
   clearTimeout(_idleTimer);
-  _idleTimer = setTimeout(() => { sb.auth.signOut(); }, IDLE_MS);
+  _idleTimer = setTimeout(() => {
+    // Show the lock overlay WITHOUT signing out — session stays alive.
+    // The user just re-enters their password to unlock, no full re-login needed.
+    _sessionLocked = true;
+    lockShowPanel('login');
+    const overlay = document.getElementById('lock-overlay');
+    if (overlay) overlay.style.display = 'flex';
+    setTimeout(() => { const i = document.getElementById('lock-email-input'); if (i) i.focus(); }, 100);
+  }, IDLE_MS);
 }
 ['mousemove','mousedown','keydown','touchstart','scroll','click'].forEach(evt => {
   document.addEventListener(evt, resetIdleTimer, { passive: true });
@@ -2151,6 +2169,24 @@ async function lockTryLogin() {
   err.textContent = '';
   btn.disabled = true; btn.textContent = 'Signing in\u2026';
   try {
+    // If the screen was locked due to inactivity (not a full sign-out), the
+    // session is still alive — verify credentials then just unlock the screen.
+    if (_sessionLocked && currentUser) {
+      const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+      btn.disabled = false; btn.textContent = 'Sign In';
+      if (error) {
+        err.textContent = 'Incorrect email or password.';
+        document.getElementById('lock-pw-input').select();
+        return;
+      }
+      // Correct password — unlock without reloading all data
+      _sessionLocked = false;
+      document.getElementById('lock-overlay').style.display = 'none';
+      document.getElementById('lock-pw-input').value = '';
+      resetIdleTimer();
+      return;
+    }
+    // Fresh login (no active session)
     const { error } = await sb.auth.signInWithPassword({ email, password: pw });
     btn.disabled = false; btn.textContent = 'Sign In';
     if (error) {
@@ -2213,7 +2249,13 @@ function openChangePw() {
 }
 
 function lockScreen() {
-  sb.auth.signOut();
+  _sessionLocked = true;
+  clearTimeout(_idleTimer);
+  lockShowPanel('login');
+  const overlay = document.getElementById('lock-overlay');
+  if (overlay) overlay.style.display = 'flex';
+  document.getElementById('lock-pw-input').value = '';
+  setTimeout(() => { const i = document.getElementById('lock-email-input'); if (i) i.focus(); }, 100);
 }
 
 // ── Read-only roles (head_teacher, viewer) can see everything but can't
@@ -2231,28 +2273,37 @@ function applyRolePermissions() {
 sb.auth.onAuthStateChange(async (event, session) => {
   const overlay = document.getElementById('lock-overlay');
   if (session && session.user) {
+    // If this is just a token refresh on an already-loaded session (e.g. after
+    // idle-lock re-auth or auto token refresh), don't reload all the data —
+    // that would be slow and unnecessary.
+    const isFirstLoad = !currentUser;
     currentUser = session.user;
-    const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-    if (error || !profile) {
-      // Profile row didn't exist yet (auto-created by a database trigger on
-      // signup) — try once more after a short delay, then give up gracefully.
-      await new Promise(r => setTimeout(r, 600));
-      const retry = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-      currentProfile = retry.data || { id: session.user.id, full_name: session.user.email, role: 'viewer' };
-    } else {
-      currentProfile = profile;
+    if (isFirstLoad || !currentProfile) {
+      const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+      if (error || !profile) {
+        await new Promise(r => setTimeout(r, 600));
+        const retry = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+        currentProfile = retry.data || { id: session.user.id, full_name: session.user.email, role: 'viewer' };
+      } else {
+        currentProfile = profile;
+      }
     }
     document.getElementById('lock-email-input').value = '';
     document.getElementById('lock-pw-input').value = '';
     document.getElementById('lock-login-err').textContent = '';
     if (overlay) overlay.style.display = 'none';
+    _sessionLocked = false;
     applyRolePermissions();
     resetIdleTimer();
-    await loadAll();
-    renderDashboard();
+    if (isFirstLoad) {
+      await loadAll();
+      renderDashboard();
+    }
   } else {
+    // Genuine sign-out (not just idle lock)
     currentUser = null;
     currentProfile = null;
+    _sessionLocked = false;
     clearTimeout(_idleTimer);
     lockShowPanel('login');
     if (overlay) overlay.style.display = 'flex';
@@ -2476,7 +2527,7 @@ if (document.readyState === 'loading') {
   <div style="background:#fff;border-radius:12px;padding:36px 40px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center">
     <img src="" id="lock-logo" style="width:60px;height:60px;object-fit:contain;margin-bottom:12px">
     <div style="font-size:18px;font-weight:700;color:#8A191C;margin-bottom:4px">St. Edward's Memorial Junior School</div>
-    <div style="font-size:12px;color:#7A7A7A;margin-bottom:24px">STEM Management System — Term II 2026</div>
+    <div style="font-size:12px;color:#7A7A7A;margin-bottom:24px">STEM Management System</div>
     <div id="lock-panel-login">
       <div style="font-size:13px;font-weight:600;color:#4A4A4A;margin-bottom:12px;text-align:left">Sign in to continue</div>
       <input id="lock-email-input" type="email" placeholder="Email address" autocomplete="username" style="width:100%;height:40px;padding:0 12px;border:1.5px solid #D8BFBF;border-radius:6px;font-size:14px;margin-bottom:8px;box-sizing:border-box" onkeydown="if(event.key==='Enter')document.getElementById('lock-pw-input').focus()">
