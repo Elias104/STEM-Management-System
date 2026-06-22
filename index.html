@@ -720,12 +720,27 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
 
 <script>
 // ============================================================
-// ============================================================
 // SUPABASE CONNECTION
 // ============================================================
 const SUPABASE_URL = 'https://aqysoxcgzrgpbecelizv.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_AIUkLJPjpmfQgerZZj0h2w_tP3a_4Fn';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+let sb;
+try {
+  if (typeof supabase === 'undefined') throw new Error('Supabase library did not load. Check your internet connection and reload the page.');
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+} catch (e) {
+  // Show a visible error on the lock screen so the user isn't left staring
+  // at a frozen button with no explanation.
+  document.addEventListener('DOMContentLoaded', () => {
+    const err = document.getElementById('lock-login-err');
+    if (err) err.textContent = e.message;
+    const btn = document.getElementById('lock-login-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sign In'; }
+  });
+  // Stop the rest of the script from running — nothing else will work without sb.
+  throw e;
+}
 
 let currentUser = null;   // the logged-in auth user
 let currentProfile = null; // { id, full_name, role }
@@ -2131,17 +2146,22 @@ async function lockTryLogin() {
   const pw = document.getElementById('lock-pw-input').value;
   const err = document.getElementById('lock-login-err');
   const btn = document.getElementById('lock-login-btn');
+  if (!sb) { err.textContent = 'App not ready — please reload the page.'; return; }
   if (!email || !pw) { err.textContent = 'Please enter your email and password.'; return; }
   err.textContent = '';
-  btn.disabled = true; btn.textContent = 'Signing in…';
-  const { error } = await sb.auth.signInWithPassword({ email, password: pw });
-  btn.disabled = false; btn.textContent = 'Sign In';
-  if (error) {
-    err.textContent = error.message === 'Invalid login credentials' ? 'Incorrect email or password.' : error.message;
-    document.getElementById('lock-pw-input').select();
+  btn.disabled = true; btn.textContent = 'Signing in\u2026';
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+    btn.disabled = false; btn.textContent = 'Sign In';
+    if (error) {
+      err.textContent = error.message === 'Invalid login credentials' ? 'Incorrect email or password.' : error.message;
+      document.getElementById('lock-pw-input').select();
+    }
+    // On success, onAuthStateChange handles hiding the overlay and loading data.
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Sign In';
+    err.textContent = 'Connection error — check your internet and try again. (' + e.message + ')';
   }
-  // On success, onAuthStateChange (registered below) handles hiding the
-  // overlay and loading the app's data — nothing more to do here.
 }
 
 async function lockSendResetEmail() {
