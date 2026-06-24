@@ -193,6 +193,7 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
   <div class="nav-section">Staff</div>
   <div class="nav-item" onclick="goPage('staff')"><span class="nav-icon">&#128100;</span>Staff Records</div>
   <div class="nav-item" onclick="goPage('payroll')"><span class="nav-icon">&#128176;</span>Payroll & Advances</div>
+  <div class="nav-item" onclick="goPage('allowances')"><span class="nav-icon">&#9749;</span>Allowances</div>
   <div class="nav-section">Students</div>
   <div class="nav-item" onclick="goPage('students')"><span class="nav-icon">&#127891;</span>Student Records</div>
   <div class="nav-section">Cashbook</div>
@@ -435,7 +436,7 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
                   <option>Transport</option><option>Repairs & Maintenance</option>
                   <option>Printing & Photocopying</option><option>Bank Charges</option>
                   <option>Examination Fees</option><option>Sports & Games</option>
-                  <option>Staff Welfare</option><option>Communication</option>
+                  <option>Staff Welfare</option><option>Staff Allowance</option><option>Communication</option>
                   <option>Rent / Premises</option>
                   <option>Uniforms (Supplier Payment)</option>
                   <option>Swimming (Facility/Teacher Payment)</option>
@@ -585,7 +586,7 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
           <div id="adv-msg"></div>
         </div></div>
         <div class="card"><div class="card-body">
-          <div class="section-title">Outstanding Advances</div>
+          <div class="section-title">Advance History</div>
           <div id="adv-outstanding"></div>
         </div></div>
       </div>
@@ -600,11 +601,52 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
           <select id="ph-staff" onchange="renderPayHistory()" style="height:32px;font-size:12px"><option value="">All staff</option></select>
         </div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>Date</th><th>Staff</th><th>Month</th><th class="td-right">Gross</th><th class="td-right">Advance Deducted</th><th class="td-right">Net Paid</th></tr></thead>
+          <thead><tr><th>Date</th><th>Staff</th><th>Month</th><th class="td-right">Gross</th><th class="td-right">Advance Deducted</th><th class="td-right">Net Paid</th><th></th></tr></thead>
           <tbody id="ph-body"></tbody>
           <tfoot id="ph-foot"></tfoot>
         </table></div>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== ALLOWANCES ===== -->
+  <div class="page" id="page-allowances">
+    <div class="two-col">
+      <div class="card"><div class="card-body">
+        <div class="section-title">Record Daily / Weekly Allowance</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">For ad-hoc allowances paid out day to day — separate from the fixed monthly allowance set on a staff member's record. Each one is logged as an expense for that day and flows into the cashbook automatically.</div>
+        <div class="form-grid fg-2" style="margin-bottom:10px">
+          <div class="form-group"><label class="lbl" for="al-staff">Staff member</label>
+            <select id="al-staff"><option value="">-- Select --</option></select>
+          </div>
+          <div class="form-group"><label class="lbl" for="al-amt">Amount (UGX)</label><input id="al-amt" type="number" placeholder="e.g. 10000"></div>
+        </div>
+        <div class="form-grid fg-2" style="margin-bottom:10px">
+          <div class="form-group"><label class="lbl" for="al-date">Date</label><input id="al-date" type="date"></div>
+          <div class="form-group"><label class="lbl" for="al-method">Payment method</label>
+            <select id="al-method"><option value="Cash">Cash</option><option value="Mobile Money">Mobile Money</option><option value="School Pay">School Pay</option><option value="Bank">Bank Transfer</option></select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:10px"><label class="lbl" for="al-note">Note (optional)</label><input id="al-note" placeholder="e.g. Weekly transport allowance"></div>
+        <button class="btn btn-primary" onclick="recordAllowance()">&#10003; Record Allowance</button>
+        <div id="al-msg"></div>
+      </div></div>
+      <div class="card"><div class="card-body">
+        <div class="section-title">Total by Staff</div>
+        <div id="al-summary"></div>
+      </div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-head-title">Allowance Log</div></div>
+      <div class="toolbar" style="padding:10px 18px 0;display:flex;gap:8px;flex-wrap:wrap">
+        <select id="al-f-staff" name="al-f-staff" aria-label="Filter by staff" onchange="renderAllowanceLog()" style="height:32px;font-size:12px"><option value="">All staff</option></select>
+        <input id="al-search" name="al-search" aria-label="Search allowance log" placeholder="Search..." oninput="renderAllowanceLog(this.value)" style="height:32px;font-size:12px;flex:1;min-width:160px">
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Date</th><th>Staff</th><th class="td-right">Amount</th><th>Method</th><th>Note</th><th></th></tr></thead>
+        <tbody id="al-body"></tbody>
+        <tfoot id="al-foot"></tfoot>
+      </table></div>
     </div>
   </div>
 
@@ -639,6 +681,36 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
         <button class="modal-close" onclick="closeStudentPayments()">&#10005;</button>
       </div>
       <div class="modal-body" id="spm-body"></div>
+    </div>
+  </div>
+
+  <!-- Staff edit modal -->
+  <div class="modal-overlay" id="staff-edit-modal" onclick="if(event.target===this) closeStaffEdit()">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="sem-title">Edit Staff</h3>
+        <button class="modal-close" onclick="closeStaffEdit()">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid fg-2" style="margin-bottom:10px">
+          <div class="form-group"><label class="lbl" for="sem-name">Full name</label><input id="sem-name"></div>
+          <div class="form-group"><label class="lbl" for="sem-role">Role / Position</label><input id="sem-role"></div>
+        </div>
+        <div class="form-grid fg-2" style="margin-bottom:10px">
+          <div class="form-group"><label class="lbl" for="sem-salary">Monthly salary (UGX)</label><input id="sem-salary" type="number"></div>
+          <div class="form-group"><label class="lbl" for="sem-allowance">Monthly allowance (UGX)</label><input id="sem-allowance" type="number"></div>
+        </div>
+        <div class="form-grid fg-3" style="margin-bottom:14px">
+          <div class="form-group"><label class="lbl" for="sem-phone">Phone</label><input id="sem-phone"></div>
+          <div class="form-group"><label class="lbl" for="sem-nin">NIN</label><input id="sem-nin"></div>
+          <div class="form-group"><label class="lbl" for="sem-joined">Date joined</label><input id="sem-joined" type="date"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <button class="btn btn-danger btn-sm" onclick="deleteStaffFromEdit()">&#215; Delete Staff Member</button>
+          <button class="btn btn-primary" onclick="saveStaffEdit()">&#10003; Save Changes</button>
+        </div>
+        <div id="sem-msg"></div>
+      </div>
     </div>
   </div>
 
@@ -1106,6 +1178,7 @@ async function renderCashbookPastDays() {
 const PAGE_TITLES = {
   dashboard: 'Dashboard', fees: 'School Fees', 'other-income': 'Sundry Income',
   expenses: 'Expenses', staff: 'Staff Records', payroll: 'Payroll & Advances',
+  allowances: 'Allowances',
   students: 'Student Records', cashbook: 'Daily Cashbook', reports: 'Reports & Export'
 };
 async function goPage(id) {
@@ -1131,6 +1204,7 @@ async function goPage(id) {
     if (id === 'expenses') { renderExpLog(); renderExpSummary(); populateExpCatFilter(); }
     if (id === 'staff') renderStaffList();
     if (id === 'payroll') { populatePayrollStaff(); renderAdvOutstanding(); renderPayHistory(); }
+    if (id === 'allowances') { populateAllowanceStaffPicker(); populateAllowanceStaffFilter(); renderAllowanceLog(); renderAllowanceSummary(); }
     if (id === 'students') renderStudents();
     if (id === 'cashbook') await renderCashbook();
     if (id === 'reports') renderReports();
@@ -1767,25 +1841,86 @@ function renderStaffList() {
     <td class="td-right">${fmt(s.salary)}</td><td class="td-right">${fmt(s.allowance)}</td>
     <td class="td-right" style="font-weight:700;color:var(--navy)">${fmt(s.salary+s.allowance)}</td>
     <td>${s.phone||'—'}</td>
-    <td><button class="btn btn-danger btn-xs" onclick="removeStaff('${s.id}')">&#215;</button></td>
+    <td style="white-space:nowrap"><button class="btn btn-ghost btn-xs" onclick="openStaffEdit('${s.id}')" title="Edit this staff record">&#9998;</button> <button class="btn btn-danger btn-xs" onclick="removeStaff('${s.id}')">&#215;</button></td>
   </tr>`).join('');
   const totS = DB.staff.reduce((t,s)=>t+s.salary,0), totA = DB.staff.reduce((t,s)=>t+s.allowance,0);
   document.getElementById('staff-foot').innerHTML = `<tr><td colspan="3">TOTAL (${DB.staff.length} staff)</td><td class="td-right">${fmt(totS)}</td><td class="td-right">${fmt(totA)}</td><td class="td-right">${fmt(totS+totA)}</td><td colspan="2"></td></tr>`;
 }
 
 async function removeStaff(id) {
-  if (!confirm('Remove this staff member?')) return;
+  if (!confirm('Remove this staff member?')) return false;
   try {
     await sbDelete('staff', id);
     DB.staff = DB.staff.filter(s => s.id !== id);
     save(); renderStaffList(); populatePayrollStaff();
+    return true;
   } catch (err) {
     if (err.message && err.message.includes('violates foreign key')) {
-      alert('This staff member has salary payment or advance history, so they can\'t be deleted — that history is kept for your records. If they\'ve left the school, you can instead edit their record to mark them inactive (ask me to add that option if you\'d like it).');
+      alert('This staff member has salary payment or advance history, so they can\'t be deleted — that history is kept for your records. If they\'ve left the school, you can instead edit their record to mark them inactive.');
     } else {
       alert('Could not remove staff member: ' + err.message);
     }
+    return false;
   }
+}
+
+// ============================================================
+// STAFF RECORD EDITING
+// ============================================================
+let editingStaffId = null;
+
+function openStaffEdit(staffId) {
+  const staff = DB.staff.find(s => s.id === staffId);
+  if (!staff) return;
+  editingStaffId = staffId;
+  document.getElementById('sem-title').textContent = 'Edit — ' + staff.name;
+  document.getElementById('sem-name').value = staff.name;
+  document.getElementById('sem-role').value = staff.role;
+  document.getElementById('sem-salary').value = staff.salary;
+  document.getElementById('sem-allowance').value = staff.allowance;
+  document.getElementById('sem-phone').value = staff.phone;
+  document.getElementById('sem-nin').value = staff.nin;
+  document.getElementById('sem-joined').value = staff.joined || '';
+  document.getElementById('sem-msg').innerHTML = '';
+  document.getElementById('staff-edit-modal').classList.add('active');
+}
+
+function closeStaffEdit() {
+  document.getElementById('staff-edit-modal').classList.remove('active');
+  editingStaffId = null;
+}
+
+async function saveStaffEdit() {
+  if (!editingStaffId) return;
+  const msg = document.getElementById('sem-msg');
+  const name = document.getElementById('sem-name').value.trim();
+  const salary = Number(document.getElementById('sem-salary').value);
+  if (!name) { msg.innerHTML = '<div class="msg msg-err">Staff name is required.</div>'; return; }
+  if (isNaN(salary) || salary < 0) { msg.innerHTML = '<div class="msg msg-err">Enter a valid salary.</div>'; return; }
+  const patch = {
+    name: name,
+    role: document.getElementById('sem-role').value.trim(),
+    salary: salary,
+    allowance: Number(document.getElementById('sem-allowance').value) || 0,
+    phone: document.getElementById('sem-phone').value.trim() || null,
+    nin: document.getElementById('sem-nin').value.trim() || null,
+    date_joined: document.getElementById('sem-joined').value || null,
+  };
+  try {
+    const updated = await sbUpdate('staff', editingStaffId, patch);
+    const idx = DB.staff.findIndex(s => s.id === editingStaffId);
+    if (idx >= 0) DB.staff[idx] = mapStaff(updated);
+    save(); renderStaffList(); populatePayrollStaff(); populateAdvStaff(); populatePayHistoryStaff(); populateAllowanceStaffPicker(); populateAllowanceStaffFilter();
+    msg.innerHTML = '<div class="msg msg-ok">&#10003; Staff record updated.</div>';
+    setTimeout(closeStaffEdit, 900);
+  } catch (err) {
+    msg.innerHTML = '<div class="msg msg-err">Could not save: ' + err.message + '</div>';
+  }
+}
+
+async function deleteStaffFromEdit() {
+  if (!editingStaffId) return;
+  if (await removeStaff(editingStaffId)) closeStaffEdit();
 }
 
 // ============================================================
@@ -1897,28 +2032,155 @@ async function recordAdvance() {
 
 function renderAdvOutstanding() {
   const el = document.getElementById('adv-outstanding'); if (!el) return;
-  const active = DB.advances.filter(a => (a.repaid||0) < a.amt);
-  if (!active.length) { el.innerHTML = '<div class="empty" style="padding:12px">No outstanding advances</div>'; return; }
-  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Staff</th><th>Date</th><th class="td-right">Advance</th><th class="td-right">Repaid</th><th class="td-right">Outstanding</th></tr></thead><tbody>' +
-    active.map(a => `<tr><td style="font-weight:600">${a.staffName}</td><td>${a.date}</td>
+  // Shows every advance (not just outstanding ones) so any entry — including
+  // a mistaken test figure — can always be found and deleted from here.
+  const all = [...DB.advances].sort((a,b) => b.date.localeCompare(a.date));
+  if (!all.length) { el.innerHTML = '<div class="empty" style="padding:12px">No advances recorded</div>'; return; }
+  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Staff</th><th>Date</th><th class="td-right">Advance</th><th class="td-right">Repaid</th><th class="td-right">Outstanding</th><th></th></tr></thead><tbody>' +
+    all.map(a => {
+      const outstanding = a.amt - (a.repaid||0);
+      const fullyRepaid = outstanding <= 0;
+      return `<tr><td style="font-weight:600">${a.staffName}</td><td>${a.date}</td>
       <td class="td-right">${fmt(a.amt)}</td><td class="td-right" style="color:var(--green)">${fmt(a.repaid||0)}</td>
-      <td class="td-right" style="color:var(--red);font-weight:700">${fmt(a.amt-(a.repaid||0))}</td></tr>`).join('') +
+      <td class="td-right" style="color:${fullyRepaid?'var(--green)':'var(--red)'};font-weight:700">${fullyRepaid?'Fully repaid':fmt(outstanding)}</td>
+      <td><button class="btn btn-danger btn-xs" onclick="delAdvance('${a.id}')" title="Delete this advance">&#215;</button></td></tr>`;
+    }).join('') +
     '</tbody></table></div>';
+}
+
+async function delAdvance(id) {
+  const adv = DB.advances.find(a => a.id === id);
+  if (!adv) return;
+  const repaidNote = (adv.repaid || 0) > 0 ? ' Note: UGX ' + fmt(adv.repaid) + ' of it has already been deducted from past salary payments — deleting the advance will NOT add that back to any payslip.' : '';
+  if (!confirm('Delete this advance of UGX ' + fmt(adv.amt) + ' for ' + adv.staffName + '?' + repaidNote)) return;
+  try {
+    await sbDelete('advances', id);
+    DB.advances = DB.advances.filter(a => a.id !== id);
+    await refreshCashbookTotals(adv.date);
+    save(); renderAdvOutstanding(); updateStats();
+  } catch (err) {
+    if (err.message && /closed/i.test(err.message)) {
+      alert('That day\'s cashbook is closed, so this advance can\'t be deleted yet. Reopen ' + adv.date + ' from the Daily Cashbook page first, then try again.');
+    } else {
+      alert('Could not delete: ' + err.message);
+    }
+  }
 }
 
 function renderPayHistory(q) {
   const staffId = document.getElementById('ph-staff') ? document.getElementById('ph-staff').value : '';
   const body = document.getElementById('ph-body');
   const filtered = [...DB.salaryPayments].reverse().filter(p => !staffId || p.staffId === staffId);
-  if (!filtered.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No payments recorded</td></tr>'; document.getElementById('ph-foot').innerHTML=''; return; }
+  if (!filtered.length) { body.innerHTML = '<tr><td colspan="7" class="empty">No payments recorded</td></tr>'; document.getElementById('ph-foot').innerHTML=''; return; }
   body.innerHTML = filtered.map(p => `<tr>
     <td>${p.date}</td><td style="font-weight:600">${p.staffName}</td><td>${p.month}</td>
     <td class="td-right">${fmt(p.gross)}</td>
     <td class="td-right" style="color:var(--red)">${p.advDeducted>0?'('+fmt(p.advDeducted)+')':'—'}</td>
     <td class="td-right" style="font-weight:700;color:var(--green)">${fmt(p.net)}</td>
+    <td><button class="btn btn-danger btn-xs" onclick="delSalaryPayment('${p.id}')" title="Delete this payment">&#215;</button></td>
   </tr>`).join('');
   const tot = filtered.reduce((t,p)=>t+p.net,0);
-  document.getElementById('ph-foot').innerHTML = `<tr><td colspan="5">TOTAL NET PAID (${filtered.length})</td><td class="td-right">${fmt(tot)}</td></tr>`;
+  document.getElementById('ph-foot').innerHTML = `<tr><td colspan="5">TOTAL NET PAID (${filtered.length})</td><td class="td-right">${fmt(tot)}</td><td></td></tr>`;
+}
+
+async function delSalaryPayment(id) {
+  const pay = DB.salaryPayments.find(p => p.id === id);
+  if (!pay) return;
+  const deductionNote = pay.advDeducted > 0
+    ? ' This payment included an advance deduction of UGX ' + fmt(pay.advDeducted) + '. Deleting it will NOT automatically restore that amount to ' + pay.staffName + '\'s outstanding advance — go to Salary Advances and adjust it manually if needed.'
+    : '';
+  if (!confirm('Delete this salary payment of UGX ' + fmt(pay.net) + ' for ' + pay.staffName + ' (' + pay.month + ')?' + deductionNote)) return;
+  try {
+    await sbDelete('salary_payments', id);
+    DB.salaryPayments = DB.salaryPayments.filter(p => p.id !== id);
+    await refreshCashbookTotals(pay.date);
+    save(); renderPayHistory(); updateStats();
+  } catch (err) {
+    if (err.message && /closed/i.test(err.message)) {
+      alert('That day\'s cashbook is closed, so this payment can\'t be deleted yet. Reopen ' + pay.date + ' from the Daily Cashbook page first, then try again.');
+    } else {
+      alert('Could not delete: ' + err.message);
+    }
+  }
+}
+
+// ============================================================
+// ALLOWANCES (daily/weekly, ad-hoc — separate from fixed monthly allowance)
+// ============================================================
+// Stored as ordinary rows in the `expenses` table with category
+// 'Staff Allowance' and the staff member's name in `payee`. This means no
+// database changes were needed — they automatically show up in the regular
+// Expenses log/reports for that day AND flow into the daily cashbook the
+// same way every other expense does, exactly as needed.
+function populateAllowanceStaffPicker() {
+  const sel = document.getElementById('al-staff'); if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- Select --</option>' + [...DB.staff].sort((a,b)=>a.name.localeCompare(b.name)).map(s=>`<option value="${s.id}"${s.id===cur?' selected':''}>${s.name}</option>`).join('');
+}
+function populateAllowanceStaffFilter() {
+  const sel = document.getElementById('al-f-staff'); if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All staff</option>' + [...DB.staff].sort((a,b)=>a.name.localeCompare(b.name)).map(s=>`<option${s.name===cur?' selected':''}>${s.name}</option>`).join('');
+}
+
+async function recordAllowance() {
+  const staffId = document.getElementById('al-staff').value;
+  const amt = parseFloat(document.getElementById('al-amt').value);
+  const date = document.getElementById('al-date').value || today();
+  const method = document.getElementById('al-method').value;
+  const note = document.getElementById('al-note').value.trim();
+  const msg = document.getElementById('al-msg');
+  if (!staffId) { msg.innerHTML = '<div class="msg msg-err">Select a staff member.</div>'; return; }
+  if (isNaN(amt) || amt <= 0) { msg.innerHTML = '<div class="msg msg-err">Enter a valid amount.</div>'; return; }
+  const day = DB.cashbookDays[date];
+  if (day && day.status === 'closed') { msg.innerHTML = '<div class="msg msg-err">That day\'s cashbook is closed. Reopen it from the Daily Cashbook page to add entries for ' + date + '.</div>'; return; }
+  const staff = DB.staff.find(s => s.id === staffId);
+  try {
+    const desc = 'Staff Allowance — ' + staff.name + (note ? ' — ' + note : '');
+    const row = await sbInsert('expenses', { category: 'Staff Allowance', amount: amt, expense_date: date, ref: null, description: desc, payee: staff.name, method });
+    DB.expenses.push(mapExpense(row));
+    await cbLogExpense(date, desc, amt, method, '');
+    await refreshCashbookTotals(date);
+    document.getElementById('al-amt').value = '';
+    document.getElementById('al-note').value = '';
+    msg.innerHTML = '<div class="msg msg-ok">&#10003; Allowance of UGX ' + fmt(amt) + ' recorded for ' + staff.name + '</div>';
+    save(); renderAllowanceLog(); renderAllowanceSummary(); updateStats();
+    renderExpLog(); renderExpSummary(); // keep the main Expenses tab in sync too, in case it's open
+  } catch (err) {
+    msg.innerHTML = '<div class="msg msg-err">Could not save: ' + err.message + '</div>';
+  }
+}
+
+function renderAllowanceLog(q) {
+  const body = document.getElementById('al-body'); if (!body) return;
+  q = (q || '').toLowerCase();
+  const staffFilter = document.getElementById('al-f-staff') ? document.getElementById('al-f-staff').value : '';
+  const rows = DB.expenses.filter(r => r.cat === 'Staff Allowance')
+    .filter(r => (!staffFilter || r.payee === staffFilter) && (!q || (r.payee||'').toLowerCase().includes(q) || (r.desc||'').toLowerCase().includes(q)))
+    .sort((a,b) => b.date.localeCompare(a.date));
+  const foot = document.getElementById('al-foot');
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No allowances recorded yet</td></tr>'; if (foot) foot.innerHTML = ''; return; }
+  body.innerHTML = rows.map(r => `<tr>
+    <td>${r.date}</td><td style="font-weight:600">${r.payee||'—'}</td>
+    <td class="td-right" style="color:var(--red)">${fmt(r.amt)}</td><td>${r.method}</td>
+    <td>${(r.desc||'').replace('Staff Allowance — ' + (r.payee||''), '').replace(/^ — /,'') || '—'}</td>
+    <td><button class="btn btn-danger btn-xs" onclick="delExp('${r.id}')" title="Delete this allowance">&#215;</button></td>
+  </tr>`).join('');
+  const tot = rows.reduce((s,r)=>s+r.amt,0);
+  if (foot) foot.innerHTML = `<tr><td colspan="2">TOTAL (${rows.length})</td><td class="td-right" style="color:var(--red)">${fmt(tot)}</td><td colspan="3"></td></tr>`;
+}
+
+function renderAllowanceSummary() {
+  const el = document.getElementById('al-summary'); if (!el) return;
+  const byStaff = {};
+  DB.expenses.filter(r => r.cat === 'Staff Allowance').forEach(r => { byStaff[r.payee||'Unknown'] = (byStaff[r.payee||'Unknown']||0) + r.amt; });
+  if (!Object.keys(byStaff).length) { el.innerHTML = '<div class="empty" style="padding:16px">No allowances recorded yet</div>'; return; }
+  const total = Object.values(byStaff).reduce((a,b)=>a+b,0);
+  el.innerHTML = Object.entries(byStaff).sort((a,b)=>b[1]-a[1]).map(([name,amt]) => {
+    const pct = Math.round((amt/total)*100);
+    return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span>${name}</span><span style="font-weight:700;color:var(--red)">UGX ${fmt(amt)}</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:var(--red)"></div></div></div>`;
+  }).join('') + `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px;display:flex;justify-content:space-between;font-weight:700;font-size:13px"><span>TOTAL</span><span style="color:var(--red)">UGX ${fmt(total)}</span></div>`;
 }
 
 // ============================================================
@@ -2131,6 +2393,17 @@ document.getElementById('cb-date-picker').value = today();
 // in the UI.
 // ============================================================
 
+// Races a promise against a timeout so a flaky/slow connection can never
+// leave the app hanging silently (e.g. stuck on "Signing in…" forever).
+// On timeout, rejects with a clear, user-facing message instead.
+function withTimeout(promise, ms, timeoutMessage) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(timeoutMessage || 'That took too long — please check your internet connection and try again.')), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // ── Idle auto-lock: 30 minutes — signs the person out for real ──
 let _idleTimer = null;
 let _sessionLocked = false; // screen is locked but session is still alive
@@ -2168,11 +2441,13 @@ async function lockTryLogin() {
   if (!email || !pw) { err.textContent = 'Please enter your email and password.'; return; }
   err.textContent = '';
   btn.disabled = true; btn.textContent = 'Signing in\u2026';
+  const LOGIN_TIMEOUT_MS = 20000;
+  const TIMEOUT_MSG = 'Sign-in is taking too long — check your internet connection and try again.';
   try {
     // If the screen was locked due to inactivity (not a full sign-out), the
     // session is still alive — verify credentials then just unlock the screen.
     if (_sessionLocked && currentUser) {
-      const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+      const { error } = await withTimeout(sb.auth.signInWithPassword({ email, password: pw }), LOGIN_TIMEOUT_MS, TIMEOUT_MSG);
       btn.disabled = false; btn.textContent = 'Sign In';
       if (error) {
         err.textContent = 'Incorrect email or password.';
@@ -2187,7 +2462,7 @@ async function lockTryLogin() {
       return;
     }
     // Fresh login (no active session)
-    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+    const { error } = await withTimeout(sb.auth.signInWithPassword({ email, password: pw }), LOGIN_TIMEOUT_MS, TIMEOUT_MSG);
     btn.disabled = false; btn.textContent = 'Sign In';
     if (error) {
       err.textContent = error.message === 'Invalid login credentials' ? 'Incorrect email or password.' : error.message;
@@ -2196,7 +2471,7 @@ async function lockTryLogin() {
     // On success, onAuthStateChange handles hiding the overlay and loading data.
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Sign In';
-    err.textContent = 'Connection error — check your internet and try again. (' + e.message + ')';
+    err.textContent = e.message || ('Connection error — check your internet and try again.');
   }
 }
 
@@ -2279,13 +2554,28 @@ sb.auth.onAuthStateChange(async (event, session) => {
     const isFirstLoad = !currentUser;
     currentUser = session.user;
     if (isFirstLoad || !currentProfile) {
-      const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-      if (error || !profile) {
-        await new Promise(r => setTimeout(r, 600));
-        const retry = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-        currentProfile = retry.data || { id: session.user.id, full_name: session.user.email, role: 'viewer' };
-      } else {
-        currentProfile = profile;
+      // This lookup is wrapped in try/catch with timeouts so that a slow or
+      // failed connection can NEVER leave the person stuck behind the lock
+      // overlay after they've already signed in successfully — worst case,
+      // they're treated as a read-only viewer until the next reload.
+      try {
+        const res = await withTimeout(
+          sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
+          10000, 'Profile lookup timed out.'
+        );
+        if (res.error || !res.data) {
+          await new Promise(r => setTimeout(r, 600));
+          const retry = await withTimeout(
+            sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
+            10000, 'Profile lookup timed out.'
+          );
+          currentProfile = retry.data || { id: session.user.id, full_name: session.user.email, role: 'viewer' };
+        } else {
+          currentProfile = res.data;
+        }
+      } catch (e) {
+        console.error('Profile lookup failed:', e.message);
+        currentProfile = { id: session.user.id, full_name: session.user.email, role: 'viewer' };
       }
     }
     document.getElementById('lock-email-input').value = '';
@@ -2296,8 +2586,13 @@ sb.auth.onAuthStateChange(async (event, session) => {
     applyRolePermissions();
     resetIdleTimer();
     if (isFirstLoad) {
-      await loadAll();
-      renderDashboard();
+      try {
+        await withTimeout(loadAll(), 20000, 'Loading data timed out.');
+        renderDashboard();
+      } catch (e) {
+        console.error('loadAll failed:', e.message);
+        showPageError('dashboard', e);
+      }
     }
   } else {
     // Genuine sign-out (not just idle lock)
