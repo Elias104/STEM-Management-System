@@ -2131,17 +2131,6 @@ document.getElementById('cb-date-picker').value = today();
 // in the UI.
 // ============================================================
 
-// Races a promise against a timeout so a flaky/slow connection can never
-// leave the app hanging silently (e.g. stuck on "Signing in…" forever).
-// On timeout, rejects with a clear, user-facing message instead.
-function withTimeout(promise, ms, timeoutMessage) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(timeoutMessage || 'That took too long — please check your internet connection and try again.')), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
 // ── Idle auto-lock: 30 minutes — signs the person out for real ──
 let _idleTimer = null;
 let _sessionLocked = false; // screen is locked but session is still alive
@@ -2179,13 +2168,11 @@ async function lockTryLogin() {
   if (!email || !pw) { err.textContent = 'Please enter your email and password.'; return; }
   err.textContent = '';
   btn.disabled = true; btn.textContent = 'Signing in\u2026';
-  const LOGIN_TIMEOUT_MS = 20000;
-  const TIMEOUT_MSG = 'Sign-in is taking too long — check your internet connection and try again.';
   try {
     // If the screen was locked due to inactivity (not a full sign-out), the
     // session is still alive — verify credentials then just unlock the screen.
     if (_sessionLocked && currentUser) {
-      const { error } = await withTimeout(sb.auth.signInWithPassword({ email, password: pw }), LOGIN_TIMEOUT_MS, TIMEOUT_MSG);
+      const { error } = await sb.auth.signInWithPassword({ email, password: pw });
       btn.disabled = false; btn.textContent = 'Sign In';
       if (error) {
         err.textContent = 'Incorrect email or password.';
@@ -2200,7 +2187,7 @@ async function lockTryLogin() {
       return;
     }
     // Fresh login (no active session)
-    const { error } = await withTimeout(sb.auth.signInWithPassword({ email, password: pw }), LOGIN_TIMEOUT_MS, TIMEOUT_MSG);
+    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
     btn.disabled = false; btn.textContent = 'Sign In';
     if (error) {
       err.textContent = error.message === 'Invalid login credentials' ? 'Incorrect email or password.' : error.message;
@@ -2209,7 +2196,7 @@ async function lockTryLogin() {
     // On success, onAuthStateChange handles hiding the overlay and loading data.
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Sign In';
-    err.textContent = e.message || ('Connection error — check your internet and try again.');
+    err.textContent = 'Connection error — check your internet and try again. (' + e.message + ')';
   }
 }
 
@@ -2292,28 +2279,13 @@ sb.auth.onAuthStateChange(async (event, session) => {
     const isFirstLoad = !currentUser;
     currentUser = session.user;
     if (isFirstLoad || !currentProfile) {
-      // This lookup is wrapped in try/catch with timeouts so that a slow or
-      // failed connection can NEVER leave the person stuck behind the lock
-      // overlay after they've already signed in successfully — worst case,
-      // they're treated as a read-only viewer until the next reload.
-      try {
-        const res = await withTimeout(
-          sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
-          10000, 'Profile lookup timed out.'
-        );
-        if (res.error || !res.data) {
-          await new Promise(r => setTimeout(r, 600));
-          const retry = await withTimeout(
-            sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
-            10000, 'Profile lookup timed out.'
-          );
-          currentProfile = retry.data || { id: session.user.id, full_name: session.user.email, role: 'viewer' };
-        } else {
-          currentProfile = res.data;
-        }
-      } catch (e) {
-        console.error('Profile lookup failed:', e.message);
-        currentProfile = { id: session.user.id, full_name: session.user.email, role: 'viewer' };
+      const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+      if (error || !profile) {
+        await new Promise(r => setTimeout(r, 600));
+        const retry = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+        currentProfile = retry.data || { id: session.user.id, full_name: session.user.email, role: 'viewer' };
+      } else {
+        currentProfile = profile;
       }
     }
     document.getElementById('lock-email-input').value = '';
@@ -2324,13 +2296,8 @@ sb.auth.onAuthStateChange(async (event, session) => {
     applyRolePermissions();
     resetIdleTimer();
     if (isFirstLoad) {
-      try {
-        await withTimeout(loadAll(), 20000, 'Loading data timed out.');
-        renderDashboard();
-      } catch (e) {
-        console.error('loadAll failed:', e.message);
-        showPageError('dashboard', e);
-      }
+      await loadAll();
+      renderDashboard();
     }
   } else {
     // Genuine sign-out (not just idle lock)
