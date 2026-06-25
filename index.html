@@ -1009,7 +1009,20 @@ async function refreshCashbookTotals(date) {
 
 // Returns the local day record, creating it in Supabase first if it doesn't exist yet.
 async function ensureCashbookDay(date) {
-  if (DB.cashbookDays[date]) return DB.cashbookDays[date];
+  if (DB.cashbookDays[date]) {
+    // Day already exists — but if opening_cash is 0 and there's a prior closed day,
+    // the carry-forward was never written. Recalculate and update it now.
+    const day = DB.cashbookDays[date];
+    if (day.openingCash === 0 && day.status !== 'closed') {
+      const correctOpening = computeOpeningCashFor(date);
+      if (correctOpening > 0) {
+        const updated = await sbUpdate('cashbook_days', date, { opening_cash: correctOpening }, 'cashbook_date');
+        DB.cashbookDays[date] = mapCashbookDay(updated);
+        await refreshCashbookTotals(date);
+      }
+    }
+    return DB.cashbookDays[date];
+  }
   const opening = computeOpeningCashFor(date);
   const row = await sbInsert('cashbook_days', { cashbook_date: date, opening_cash: opening, status: 'open' });
   DB.cashbookDays[date] = mapCashbookDay(row);
