@@ -462,9 +462,21 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
             <div class="form-group" style="margin-bottom:10px"><label class="lbl" for="ex-payee">Paid to (payee)</label><input id="ex-payee" placeholder="e.g. Nakayima Hardware"></div>
             <div class="form-grid fg-3" style="margin-bottom:10px">
               <div class="form-group"><label class="lbl" for="ex-method">Payment method</label>
-                <select id="ex-method"><option value="Cash">Cash</option><option value="Mobile Money">Mobile Money</option><option value="Bank">Bank Transfer</option></select>
+                <select id="ex-method" onchange="exToggleMomoSource()"><option value="Cash">Cash</option><option value="Mobile Money">Mobile Money</option><option value="Bank">Bank Transfer</option></select>
               </div>
               <div class="form-group"><label class="lbl" for="ex-ref">Voucher / Ref. No.</label><input id="ex-ref" placeholder="e.g. V-001"></div>
+            </div>
+            <!-- Mobile Money source — only shown when method = Mobile Money -->
+            <div class="form-group" id="ex-momo-source-wrap" style="display:none;margin-bottom:10px">
+              <label class="lbl" for="ex-momo-source">Mobile Money funded from</label>
+              <select id="ex-momo-source">
+                <option value="daily_cash">Daily Cash (physical cash converted to MoMo)</option>
+                <option value="director_momo">Director's Mobile Money (separate from daily cash)</option>
+                <option value="bank">Bank (funds sent from bank account)</option>
+              </select>
+              <div style="font-size:11px;color:var(--text3);margin-top:4px">
+                Choose "Daily Cash" if you took physical cash and sent it as MoMo — it will be deducted from today's cash balance. Choose "Director's Mobile Money" or "Bank" if the money came from a separate source.
+              </div>
             </div>
             <button class="btn btn-primary" onclick="recordExpense()" style="width:100%">&#10003; Record Expense</button>
             <div id="ex-msg"></div>
@@ -784,6 +796,46 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
       <div class="section-title">Outstanding Fees by Class</div>
       <div id="rpt-outstanding"></div>
     </div></div>
+
+    <!-- Per-Sundry Income Reports -->
+    <div class="card">
+      <div class="card-head"><div class="card-head-title">&#128202; Sundry Income — Individual Stream Reports</div></div>
+      <div class="card-body">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Generate a detailed report for any single sundry income stream. Select the stream and an optional date range, then export to CSV.</div>
+        <div class="form-grid fg-3" style="margin-bottom:10px">
+          <div class="form-group"><label class="lbl" for="rpt-oi-stream">Income stream</label>
+            <select id="rpt-oi-stream"><option value="">-- All streams --</option></select>
+          </div>
+          <div class="form-group"><label class="lbl" for="rpt-oi-from">From date</label><input id="rpt-oi-from" type="date"></div>
+          <div class="form-group"><label class="lbl" for="rpt-oi-to">To date</label><input id="rpt-oi-to" type="date"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn btn-primary btn-sm" onclick="renderSundryReport()">&#128202; Preview Report</button>
+          <button class="btn btn-success btn-sm" onclick="exportSundryReport()">&#8681; Export CSV</button>
+        </div>
+        <div id="rpt-sundry-preview"></div>
+      </div>
+    </div>
+
+    <!-- Per-Expense Category Reports -->
+    <div class="card">
+      <div class="card-head"><div class="card-head-title">&#128202; Expenses — Individual Category Reports</div></div>
+      <div class="card-body">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Generate a detailed report for any single expense category. Select the category and an optional date range, then export to CSV.</div>
+        <div class="form-grid fg-3" style="margin-bottom:10px">
+          <div class="form-group"><label class="lbl" for="rpt-ex-cat">Expense category</label>
+            <select id="rpt-ex-cat"><option value="">-- All categories --</option></select>
+          </div>
+          <div class="form-group"><label class="lbl" for="rpt-ex-from">From date</label><input id="rpt-ex-from" type="date"></div>
+          <div class="form-group"><label class="lbl" for="rpt-ex-to">To date</label><input id="rpt-ex-to" type="date"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn btn-primary btn-sm" onclick="renderExpenseReport()">&#128202; Preview Report</button>
+          <button class="btn btn-success btn-sm" onclick="exportExpenseReport()">&#8681; Export CSV</button>
+        </div>
+        <div id="rpt-expense-preview"></div>
+      </div>
+    </div>
   </div>
 
   </div><!-- /content -->
@@ -882,6 +934,15 @@ async function loadAll() {
   DB.advances = (advances.data || []).map(mapAdvance);
   DB.cashbookDays = {};
   (cashbookDays.data || []).forEach(r => { DB.cashbookDays[r.cashbook_date] = mapCashbookDay(r); });
+  // Load totals for ALL cashbook days so carry-forward balances are always available
+  const { data: allTotals } = await sb.from('cashbook_day_totals').select('*');
+  (allTotals || []).forEach(data => {
+    DB.cashbookTotals[data.cashbook_date] = {
+      cashIn: Number(data.cash_in), momoIn: Number(data.momo_in), schoolPayIn: Number(data.school_pay_in), bankIn: Number(data.bank_in), totalIn: Number(data.total_in),
+      cashOut: Number(data.cash_out), momoOut: Number(data.momo_out), schoolPayOut: 0, bankOut: Number(data.bank_out), totalOut: Number(data.total_out),
+      closingCash: Number(data.closing_cash),
+    };
+  });
 }
 
 // save() is now a no-op kept only so any leftover call sites in older code
@@ -957,12 +1018,23 @@ function getCashbookDay(date) {
   return DB.cashbookDays[date] || { date, openingCash: 0, status: 'open', entries: [] };
 }
 function computeOpeningCashFor(date) {
-  const priorDates = Object.keys(DB.cashbookDays).filter(d => d < date && DB.cashbookDays[d].status === 'closed').sort();
-  if (!priorDates.length) return 0;
-  const prior = DB.cashbookDays[priorDates[priorDates.length - 1]];
-  if (prior.bankAction === 'bank') return 0;
-  const priorTotals = DB.cashbookTotals[priorDates[priorDates.length - 1]];
-  return priorTotals ? priorTotals.closingCash : prior.openingCash;
+  // Walk backwards through all prior days to find the most recent CLOSED one.
+  const allPrior = Object.keys(DB.cashbookDays).filter(d => d < date).sort();
+  for (let i = allPrior.length - 1; i >= 0; i--) {
+    const d = allPrior[i];
+    const day = DB.cashbookDays[d];
+    if (day.status !== 'closed') continue;
+    // If cash was banked on close, next day opens at 0
+    if (day.bankAction === 'bank') return 0;
+    // Use the cached totals view (most accurate source)
+    const t = DB.cashbookTotals[d];
+    if (t && t.closingCash !== undefined) return t.closingCash;
+    // Fall back to the summary saved at close time
+    if (day.summary && day.summary.closingCash !== undefined) return day.summary.closingCash;
+    // Last resort
+    return day.openingCash;
+  }
+  return 0;
 }
 // Ensures the day exists (so writes against a brand-new date succeed), then
 // checks the closed-day lock client-side for a fast, friendly error message.
@@ -1732,6 +1804,7 @@ async function recordExpense() {
   const desc = document.getElementById('ex-desc').value.trim();
   const payee = document.getElementById('ex-payee').value.trim();
   const method = document.getElementById('ex-method').value;
+  const momoSource = method === 'Mobile Money' ? (document.getElementById('ex-momo-source').value || 'daily_cash') : null;
   const msg = document.getElementById('ex-msg');
   const uniformItem = cat === 'Uniforms (Supplier Payment)' ? document.getElementById('ex-uniform-item').value : null;
   const swimmingType = cat === 'Swimming (Facility/Teacher Payment)' ? document.getElementById('ex-swimming-type').value : null;
@@ -1739,18 +1812,27 @@ async function recordExpense() {
   if (!desc) { msg.innerHTML = '<div class="msg msg-err">Enter a description.</div>'; return; }
   const day = DB.cashbookDays[date];
   if (day && day.status === 'closed') { msg.innerHTML = '<div class="msg msg-err">That day\'s cashbook is closed. Reopen it from the Daily Cashbook page to add entries for ' + date + '.</div>'; return; }
+  // Determine the effective cashbook method:
+  // If MoMo was funded from daily cash, record as Cash (reduces physical cash balance).
+  // If from director's MoMo or bank, record as Mobile Money (doesn't touch cash balance).
+  const cbMethod = (method === 'Mobile Money' && momoSource === 'daily_cash') ? 'Cash' : method;
+  const momoSourceLabel = momoSource === 'director_momo' ? ' [Director MoMo]' : momoSource === 'bank' ? ' [Bank→MoMo]' : '';
   try {
-    const row = await sbInsert('expenses', { category: cat, amount: amt, expense_date: date, ref: ref || null, description: desc, payee: payee || null, method, uniform_item: uniformItem, swimming_expense_type: swimmingType });
+    const row = await sbInsert('expenses', { category: cat, amount: amt, expense_date: date, ref: ref || null, description: desc + (momoSourceLabel ? momoSourceLabel : ''), payee: payee || null, method: cbMethod, uniform_item: uniformItem, swimming_expense_type: swimmingType });
     DB.expenses.push(mapExpense(row));
-    const logDesc = cat + (uniformItem ? ' — ' + uniformItem : '') + (swimmingType ? ' — ' + swimmingType : '') + (payee ? ' — ' + payee : '');
-    await cbLogExpense(date, logDesc, amt, method, ref);
+    const logDesc = cat + (uniformItem ? ' — ' + uniformItem : '') + (swimmingType ? ' — ' + swimmingType : '') + (payee ? ' — ' + payee : '') + momoSourceLabel;
+    await cbLogExpense(date, logDesc, amt, cbMethod, ref);
     await refreshCashbookTotals(date);
     ['ex-amt','ex-ref','ex-desc','ex-payee'].forEach(id => document.getElementById(id).value = '');
-    msg.innerHTML = '<div class="msg msg-ok">&#10003; Recorded: ' + cat + ' — UGX ' + fmt(amt) + '</div>';
+    msg.innerHTML = '<div class="msg msg-ok">&#10003; Recorded: ' + cat + ' — UGX ' + fmt(amt) + (momoSourceLabel ? ' ' + momoSourceLabel : '') + '</div>';
     save(); renderExpLog(); renderExpSummary(); updateStats();
   } catch (err) {
     msg.innerHTML = '<div class="msg msg-err">Could not save: ' + err.message + '</div>';
   }
+}
+function exToggleMomoSource() {
+  const method = document.getElementById('ex-method').value;
+  document.getElementById('ex-momo-source-wrap').style.display = method === 'Mobile Money' ? 'block' : 'none';
 }
 function exToggleSubFields() {
   const cat = document.getElementById('ex-cat').value;
@@ -2130,11 +2212,19 @@ async function recordAllowance() {
   const method = document.getElementById('al-method').value;
   const note = document.getElementById('al-note').value.trim();
   const msg = document.getElementById('al-msg');
-  if (!staffId) { msg.innerHTML = '<div class="msg msg-err">Select a staff member.</div>'; return; }
+  if (!staffId) {
+    if (!DB.staff.length) {
+      msg.innerHTML = '<div class="msg msg-err">Staff list has not loaded yet — please wait a moment and try again, or reload the page.</div>';
+    } else {
+      msg.innerHTML = '<div class="msg msg-err">Select a staff member.</div>';
+    }
+    return;
+  }
   if (isNaN(amt) || amt <= 0) { msg.innerHTML = '<div class="msg msg-err">Enter a valid amount.</div>'; return; }
   const day = DB.cashbookDays[date];
   if (day && day.status === 'closed') { msg.innerHTML = '<div class="msg msg-err">That day\'s cashbook is closed. Reopen it from the Daily Cashbook page to add entries for ' + date + '.</div>'; return; }
   const staff = DB.staff.find(s => s.id === staffId);
+  if (!staff) { msg.innerHTML = '<div class="msg msg-err">Staff member not found — please reload the page and try again.</div>'; return; }
   try {
     const desc = 'Staff Allowance — ' + staff.name + (note ? ' — ' + note : '');
     const row = await sbInsert('expenses', { category: 'Staff Allowance', amount: amt, expense_date: date, ref: null, description: desc, payee: staff.name, method });
@@ -2143,9 +2233,10 @@ async function recordAllowance() {
     await refreshCashbookTotals(date);
     document.getElementById('al-amt').value = '';
     document.getElementById('al-note').value = '';
+    document.getElementById('al-date').value = today();
     msg.innerHTML = '<div class="msg msg-ok">&#10003; Allowance of UGX ' + fmt(amt) + ' recorded for ' + staff.name + '</div>';
     save(); renderAllowanceLog(); renderAllowanceSummary(); updateStats();
-    renderExpLog(); renderExpSummary(); // keep the main Expenses tab in sync too, in case it's open
+    renderExpLog(); renderExpSummary(); // keep the main Expenses tab in sync too
   } catch (err) {
     msg.innerHTML = '<div class="msg msg-err">Could not save: ' + err.message + '</div>';
   }
@@ -2309,6 +2400,78 @@ function renderReports() {
     '<div class="tbl-wrap"><table><thead><tr><th>Class</th><th class="td-right">Total Students</th><th class="td-right">With Balance</th><th class="td-right">Outstanding (UGX)</th></tr></thead><tbody>' +
     Object.entries(byClass).sort((a,b)=>a[0].localeCompare(b[0])).map(([cls,d])=>`<tr><td><span class="badge badge-navy">${cls}</span></td><td class="td-right">${d.total}</td><td class="td-right">${d.students}</td><td class="td-right" style="font-weight:700;color:var(--amber)">${d.outstanding>0?fmt(d.outstanding):'—'}</td></tr>`).join('') +
     '</tbody></table></div>';
+
+  // Populate individual report dropdowns
+  const oiStreams = [...new Set(DB.otherIncome.map(r => r.stream))].sort();
+  const oiSel = document.getElementById('rpt-oi-stream');
+  if (oiSel) oiSel.innerHTML = '<option value="">-- All streams --</option>' + oiStreams.map(s => `<option value="${s}">${s}</option>`).join('');
+
+  const exCats = [...new Set(DB.expenses.map(r => r.cat))].sort();
+  const exSel = document.getElementById('rpt-ex-cat');
+  if (exSel) exSel.innerHTML = '<option value="">-- All categories --</option>' + exCats.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function _filterByDateRange(records, dateField, from, to) {
+  return records.filter(r => {
+    const d = r[dateField];
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  });
+}
+
+function renderSundryReport() {
+  const stream = document.getElementById('rpt-oi-stream').value;
+  const from = document.getElementById('rpt-oi-from').value;
+  const to = document.getElementById('rpt-oi-to').value;
+  let rows = stream ? DB.otherIncome.filter(r => r.stream === stream) : [...DB.otherIncome];
+  rows = _filterByDateRange(rows, 'date', from, to).sort((a,b) => b.date.localeCompare(a.date));
+  const el = document.getElementById('rpt-sundry-preview');
+  if (!rows.length) { el.innerHTML = '<div class="empty" style="padding:12px">No records match the selected filters.</div>'; return; }
+  const total = rows.reduce((s,r)=>s+r.amt,0);
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>Date</th><th>Stream</th><th>Student</th><th>Receipt#</th><th>Note</th><th class="td-right">Amount (UGX)</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td>${r.date}</td><td><span class="badge badge-gold">${r.stream}</span></td><td>${r.studentName||'—'}</td><td>${r.rcptNo||'—'}</td><td>${r.note||'—'}</td><td class="td-right" style="font-weight:600">${fmt(r.amt)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700">TOTAL (${rows.length} entries):</td><td class="td-right" style="font-weight:700;color:var(--green)">UGX ${fmt(total)}</td></tr></tfoot>
+  </table></div>`;
+}
+
+function exportSundryReport() {
+  const stream = document.getElementById('rpt-oi-stream').value;
+  const from = document.getElementById('rpt-oi-from').value;
+  const to = document.getElementById('rpt-oi-to').value;
+  let rows = stream ? DB.otherIncome.filter(r => r.stream === stream) : [...DB.otherIncome];
+  rows = _filterByDateRange(rows, 'date', from, to).sort((a,b) => b.date.localeCompare(a.date));
+  if (!rows.length) { alert('No records to export for the selected filters.'); return; }
+  const csv = [['Date','Stream','Student','Receipt No','Note','Amount (UGX)'], ...rows.map(r=>[r.date,r.stream,r.studentName||'',r.rcptNo||'',r.note||'',r.amt])];
+  dlCSV(csv, 'STEM_Sundry_' + (stream || 'All') + (from?'_from'+from:'') + (to?'_to'+to:''));
+}
+
+function renderExpenseReport() {
+  const cat = document.getElementById('rpt-ex-cat').value;
+  const from = document.getElementById('rpt-ex-from').value;
+  const to = document.getElementById('rpt-ex-to').value;
+  let rows = cat ? DB.expenses.filter(r => r.cat === cat) : [...DB.expenses];
+  rows = _filterByDateRange(rows, 'date', from, to).sort((a,b) => b.date.localeCompare(a.date));
+  const el = document.getElementById('rpt-expense-preview');
+  if (!rows.length) { el.innerHTML = '<div class="empty" style="padding:12px">No records match the selected filters.</div>'; return; }
+  const total = rows.reduce((s,r)=>s+r.amt,0);
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Payee</th><th>Ref</th><th>Method</th><th class="td-right">Amount (UGX)</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td>${r.date}</td><td><span class="badge badge-none">${r.cat}</span></td><td>${r.desc}</td><td>${r.payee||'—'}</td><td>${r.ref||'—'}</td><td>${r.method}</td><td class="td-right" style="font-weight:600;color:var(--red)">${fmt(r.amt)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700">TOTAL (${rows.length} entries):</td><td class="td-right" style="font-weight:700;color:var(--red)">UGX ${fmt(total)}</td></tr></tfoot>
+  </table></div>`;
+}
+
+function exportExpenseReport() {
+  const cat = document.getElementById('rpt-ex-cat').value;
+  const from = document.getElementById('rpt-ex-from').value;
+  const to = document.getElementById('rpt-ex-to').value;
+  let rows = cat ? DB.expenses.filter(r => r.cat === cat) : [...DB.expenses];
+  rows = _filterByDateRange(rows, 'date', from, to).sort((a,b) => b.date.localeCompare(a.date));
+  if (!rows.length) { alert('No records to export for the selected filters.'); return; }
+  const csv = [['Date','Category','Description','Payee','Ref','Method','Amount (UGX)'], ...rows.map(r=>[r.date,r.cat,r.desc,r.payee||'',r.ref||'',r.method,r.amt])];
+  dlCSV(csv, 'STEM_Expenses_' + (cat || 'All').replace(/[^a-zA-Z0-9]/g,'_') + (from?'_from'+from:'') + (to?'_to'+to:''));
 }
 
 // ============================================================
@@ -2382,7 +2545,9 @@ document.getElementById('oi-date').value = today();
 document.getElementById('ex-date').value = today();
 document.getElementById('pay-date').value = today();
 document.getElementById('adv-date').value = today();
+document.getElementById('adv-date').value = today();
 document.getElementById('cb-date-picker').value = today();
+document.getElementById('al-date').value = today();
 
 // ============================================================
 // AUTH (Supabase) — replaces the old single shared PIN.
@@ -2586,12 +2751,34 @@ sb.auth.onAuthStateChange(async (event, session) => {
     applyRolePermissions();
     resetIdleTimer();
     if (isFirstLoad) {
-      try {
-        await withTimeout(loadAll(), 20000, 'Loading data timed out.');
+      // Attempt loadAll up to 2 times before showing an error.
+      // A 20-second timeout is too short on slow connections — bumped to 45s.
+      // On the first timeout we silently retry once rather than surfacing a
+      // scary red banner that still lets edits through (confusing UX).
+      let loadErr = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          await withTimeout(loadAll(), 45000, 'Loading data timed out.');
+          loadErr = null;
+          break;
+        } catch (e) {
+          loadErr = e;
+          console.warn('loadAll attempt ' + attempt + ' failed:', e.message);
+          if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+      if (loadErr) {
+        console.error('loadAll failed after retries:', loadErr.message);
+        showPageError('dashboard', loadErr);
+      } else {
         renderDashboard();
-      } catch (e) {
-        console.error('loadAll failed:', e.message);
-        showPageError('dashboard', e);
+        // Pre-populate all staff dropdowns so they're ready before the user
+        // navigates — especially important for the Allowances page picker.
+        populateAllowanceStaffPicker();
+        populateAllowanceStaffFilter();
+        populatePayrollStaff();
+        populateAdvStaff();
+        populatePayHistoryStaff();
       }
     }
   } else {
