@@ -934,15 +934,20 @@ async function loadAll() {
   DB.advances = (advances.data || []).map(mapAdvance);
   DB.cashbookDays = {};
   (cashbookDays.data || []).forEach(r => { DB.cashbookDays[r.cashbook_date] = mapCashbookDay(r); });
-  // Load totals for ALL cashbook days so carry-forward balances are always available
-  const { data: allTotals } = await sb.from('cashbook_day_totals').select('*');
-  (allTotals || []).forEach(data => {
-    DB.cashbookTotals[data.cashbook_date] = {
-      cashIn: Number(data.cash_in), momoIn: Number(data.momo_in), schoolPayIn: Number(data.school_pay_in), bankIn: Number(data.bank_in), totalIn: Number(data.total_in),
-      cashOut: Number(data.cash_out), momoOut: Number(data.momo_out), schoolPayOut: 0, bankOut: Number(data.bank_out), totalOut: Number(data.total_out),
-      closingCash: Number(data.closing_cash),
-    };
-  });
+  // Load totals for ALL cashbook days so carry-forward balances are always available.
+  // Non-fatal: if this fails, totals will be fetched on-demand when each day is viewed.
+  try {
+    const { data: allTotals } = await sb.from('cashbook_day_totals').select('*');
+    (allTotals || []).forEach(data => {
+      DB.cashbookTotals[data.cashbook_date] = {
+        cashIn: Number(data.cash_in), momoIn: Number(data.momo_in), schoolPayIn: Number(data.school_pay_in), bankIn: Number(data.bank_in), totalIn: Number(data.total_in),
+        cashOut: Number(data.cash_out), momoOut: Number(data.momo_out), schoolPayOut: 0, bankOut: Number(data.bank_out), totalOut: Number(data.total_out),
+        closingCash: Number(data.closing_cash),
+      };
+    });
+  } catch (e) {
+    console.warn('cashbook_day_totals preload failed (non-fatal):', e.message);
+  }
 }
 
 // save() is now a no-op kept only so any leftover call sites in older code
@@ -1056,7 +1061,7 @@ function cbDayTotals(day) {
 }
 async function closeDay(date, bankAction) {
   const day = DB.cashbookDays[date];
-  if (!day || day.status === 'closed') return;
+  if (!day) return; // day must exist, but allow re-closing a reopened day
   await refreshCashbookTotals(date); // make sure we close with up-to-date totals
   const totals = cbDayTotals(day);
   const row = await sbUpdate('cashbook_days', date, {
@@ -1287,14 +1292,18 @@ async function goPage(id) {
 }
 // Global safety net: if ANY uncaught error or rejected promise happens anywhere
 // in the app, show it on screen instead of leaving a silent blank page.
+// Guard: don't show the banner before the user is logged in (errors during auth
+// startup or initial load would show confusingly on the dashboard behind the lock).
 window.addEventListener('error', function(e) {
   try {
+    if (!currentUser) return; // not logged in yet — swallow
     const active = document.querySelector('.page.active');
     if (active) showPageError(active.id.replace('page-', ''), e.error || e.message || e);
   } catch (_) {}
 });
 window.addEventListener('unhandledrejection', function(e) {
   try {
+    if (!currentUser) return; // not logged in yet — swallow
     const active = document.querySelector('.page.active');
     if (active) showPageError(active.id.replace('page-', ''), e.reason || e);
   } catch (_) {}
@@ -2545,7 +2554,6 @@ document.getElementById('oi-date').value = today();
 document.getElementById('ex-date').value = today();
 document.getElementById('pay-date').value = today();
 document.getElementById('adv-date').value = today();
-document.getElementById('adv-date').value = today();
 document.getElementById('cb-date-picker').value = today();
 document.getElementById('al-date').value = today();
 
@@ -3035,6 +3043,7 @@ if (document.readyState === 'loading') {
     </div>
   </div>
   <div style="color:rgba(255,255,255,.45);font-size:11px;margin-top:20px">STEM Management System &bull; St. Edward&#39;s Memorial Junior School</div>
+  <div style="color:rgba(255,255,255,.3);font-size:10px;margin-top:6px;letter-spacing:0.5px">Built by EMN Technologies</div>
 </div>
 
 <!-- Change-password modal (accessible from topbar) -->
