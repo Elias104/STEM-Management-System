@@ -151,11 +151,18 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
 .modal-body{padding:18px 20px}
 
 @media print{
-  .sidebar,.topbar,.no-print{display:none!important}
+  .sidebar,.topbar,.no-print,.tab-bar,.toolbar,.btn:not(.print-show),#cb-close-card,#cb-reopen-card,#readonly-banner{display:none!important}
   .main{margin-left:0}
   .content{padding:0}
-  body{background:#fff}
+  body{background:#fff;color:#000}
   .print-letterhead{display:flex!important}
+  .page{display:block!important}
+  .print-page{page-break-after:always}
+  #print-area table{width:100%;border-collapse:collapse;font-size:11px}
+  #print-area th,#print-area td{border:1px solid #ccc;padding:4px 7px}
+  #print-area th{background:#f0f0f0!important;color:#000!important}
+  .print-sign{margin-top:40px;display:flex;gap:60px}
+  .print-sign-line{border-top:1px solid #000;min-width:160px;padding-top:4px;font-size:11px;color:#000}
 }
 .print-letterhead{display:none;align-items:center;gap:14px;padding:0 0 14px;margin-bottom:14px;border-bottom:3px solid var(--navy)}
 .print-letterhead img{width:54px;height:54px;object-fit:contain}
@@ -544,6 +551,7 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
       <button class="tab-btn active" onclick="payrollTab('pay')">Pay Salary</button>
       <button class="tab-btn" onclick="payrollTab('advance')">Salary Advances</button>
       <button class="tab-btn" onclick="payrollTab('history')">Payment History</button>
+      <button class="tab-btn" onclick="payrollTab('payslip')">🖨 Print Payroll</button>
     </div>
     <!-- PAY SALARY -->
     <div class="tab-panel active" id="pt-pay">
@@ -619,7 +627,44 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
         </table></div>
       </div>
     </div>
-  </div>
+    <!-- PRINT PAYROLL -->
+    <div class="tab-panel" id="pt-payslip">
+      <div class="card"><div class="card-body">
+        <div class="section-title">🖨 Monthly Payroll Sheet</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Select the month to generate a payroll sheet for all staff. Print it, get physical signatures, then come back to authorize payment.</div>
+        <div class="form-grid fg-3" style="margin-bottom:14px">
+          <div class="form-group"><label class="lbl" for="pr-month">Month</label>
+            <select id="pr-month">
+              <option>January</option><option>February</option><option>March</option>
+              <option>April</option><option>May</option><option selected>June</option>
+              <option>July</option><option>August</option><option>September</option>
+              <option>October</option><option>November</option><option>December</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="lbl" for="pr-year">Year</label>
+            <input id="pr-year" type="number" value="2026" min="2020" max="2040">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button class="btn btn-primary" onclick="renderPayrollSheet()">&#128202; Preview Sheet</button>
+          <button class="btn btn-ghost" onclick="printPayrollReport()">🖨 Print Payroll</button>
+        </div>
+        <div id="pr-preview"></div>
+        <!-- Authorization section — shown after preview -->
+        <div id="pr-auth-section" style="display:none;margin-top:20px;padding-top:16px;border-top:2px dashed var(--border2)">
+          <div class="section-title" style="color:var(--green)">&#10003; Authorize Payment</div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Once you have collected physical signatures on the printed payroll sheet, authorize payment here. This will record all salary payments in the system for this month.</div>
+          <div class="form-grid fg-2" style="margin-bottom:12px">
+            <div class="form-group"><label class="lbl" for="pr-auth-date">Date of payment</label><input id="pr-auth-date" type="date"></div>
+            <div class="form-group"><label class="lbl" for="pr-auth-method">Payment method</label>
+              <select id="pr-auth-method"><option value="Cash">Cash</option><option value="Mobile Money">Mobile Money</option><option value="Bank">Bank Transfer</option></select>
+            </div>
+          </div>
+          <button class="btn btn-success" onclick="authorizePayroll()">&#10003; Authorize & Record All Payments</button>
+          <div id="pr-auth-msg"></div>
+        </div>
+      </div></div>
+    </div>
 
   <!-- ===== ALLOWANCES ===== -->
   <div class="page" id="page-allowances">
@@ -778,6 +823,17 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
 
   <!-- ===== REPORTS ===== -->
   <div class="page" id="page-reports">
+    <!-- Print Report Buttons Row -->
+    <div class="card no-print" style="margin-bottom:14px">
+      <div class="card-body" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <span style="font-size:12px;font-weight:700;color:var(--text3);margin-right:4px">🖨 Print Reports:</span>
+        <button class="btn btn-primary btn-sm" onclick="printFeesReport()">School Fees (All)</button>
+        <button class="btn btn-primary btn-sm" onclick="printFeesByClassReport()">Fees by Class</button>
+        <button class="btn btn-primary btn-sm" onclick="printSundryReportPrint()">Sundry (Single Stream)</button>
+        <button class="btn btn-primary btn-sm" onclick="printPayrollReport()">Payroll</button>
+        <button class="btn btn-ghost btn-sm" onclick="window.print()">Full Page Print</button>
+      </div>
+    </div>
     <div class="two-col">
       <div class="card"><div class="card-body">
         <div class="section-title">&#128438; Term II Financial Summary</div>
@@ -801,7 +857,7 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
     <div class="card">
       <div class="card-head"><div class="card-head-title">&#128202; Sundry Income — Individual Stream Reports</div></div>
       <div class="card-body">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Generate a detailed report for any single sundry income stream. Select the stream and an optional date range, then export to CSV.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Generate a detailed report for any single sundry income stream. Select the stream and an optional date range, then export or print.</div>
         <div class="form-grid fg-3" style="margin-bottom:10px">
           <div class="form-group"><label class="lbl" for="rpt-oi-stream">Income stream</label>
             <select id="rpt-oi-stream"><option value="">-- All streams --</option></select>
@@ -810,7 +866,8 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
           <div class="form-group"><label class="lbl" for="rpt-oi-to">To date</label><input id="rpt-oi-to" type="date"></div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="btn btn-primary btn-sm" onclick="renderSundryReport()">&#128202; Preview Report</button>
+          <button class="btn btn-primary btn-sm" onclick="renderSundryReport()">&#128202; Preview</button>
+          <button class="btn btn-ghost btn-sm" onclick="printSundryReportPrint()">🖨 Print</button>
           <button class="btn btn-success btn-sm" onclick="exportSundryReport()">&#8681; Export CSV</button>
         </div>
         <div id="rpt-sundry-preview"></div>
@@ -821,7 +878,7 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
     <div class="card">
       <div class="card-head"><div class="card-head-title">&#128202; Expenses — Individual Category Reports</div></div>
       <div class="card-body">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Generate a detailed report for any single expense category. Select the category and an optional date range, then export to CSV.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Generate a detailed report for any single expense category. Select the category and an optional date range, then export or print.</div>
         <div class="form-grid fg-3" style="margin-bottom:10px">
           <div class="form-group"><label class="lbl" for="rpt-ex-cat">Expense category</label>
             <select id="rpt-ex-cat"><option value="">-- All categories --</option></select>
@@ -830,10 +887,28 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
           <div class="form-group"><label class="lbl" for="rpt-ex-to">To date</label><input id="rpt-ex-to" type="date"></div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="btn btn-primary btn-sm" onclick="renderExpenseReport()">&#128202; Preview Report</button>
+          <button class="btn btn-primary btn-sm" onclick="renderExpenseReport()">&#128202; Preview</button>
           <button class="btn btn-success btn-sm" onclick="exportExpenseReport()">&#8681; Export CSV</button>
         </div>
         <div id="rpt-expense-preview"></div>
+      </div>
+    </div>
+
+    <!-- Student Financial Statement -->
+    <div class="card">
+      <div class="card-head"><div class="card-head-title">&#128100; Student Financial Statement</div></div>
+      <div class="card-body">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Print a detailed financial statement for a single student — school fees, sundry payments, and any outstanding balances.</div>
+        <div class="form-grid fg-2" style="margin-bottom:12px">
+          <div class="form-group"><label class="lbl" for="rpt-stu-sel">Select student</label>
+            <select id="rpt-stu-sel"><option value="">-- Select student --</option></select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn btn-primary btn-sm" onclick="renderStudentStatement()">&#128202; Preview</button>
+          <button class="btn btn-ghost btn-sm" onclick="printStudentStatement()">🖨 Print</button>
+        </div>
+        <div id="rpt-stu-preview"></div>
       </div>
     </div>
   </div>
@@ -1197,15 +1272,22 @@ async function renderCashbook() {
     ${totals.closingCash<0?'<div style="background:var(--red-bg);color:var(--red);font-size:11px;padding:8px;border-radius:var(--radius-sm);margin-bottom:6px">&#9888; Cash balance is negative — more cash was paid out than received. Check entries before closing the day.</div>':''}
     <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--text3)">Mobile Money and School Pay don't affect the physical cash balance — shown for record only.</div>`;
 
-  // Close / reopen panels — only visible to roles allowed to write (admin/accountant)
+  // Close / reopen panels — admin can always close OR reopen any day freely
+  const isAdmin = currentProfile && currentProfile.role === 'admin';
   const canWrite = currentProfile && (currentProfile.role === 'admin' || currentProfile.role === 'accountant');
-  document.getElementById('cb-close-card').style.display = (!isClosed && canWrite) ? 'block' : 'none';
-  document.getElementById('cb-reopen-card').style.display = (isClosed && canWrite) ? 'block' : 'none';
-  if (isClosed && canWrite) {
-    document.getElementById('cb-reopen-card').querySelector('.card-body').innerHTML = `
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Closed ${day.closedAt ? new Date(day.closedAt).toLocaleString() : ''}. Action taken: <strong>${day.bankAction==='bank'?'Banked':'Carried forward'}</strong>.</div>
-      <button class="btn btn-ghost" style="width:100%" onclick="cbPromptReopen()">&#8635; Reopen Day</button>
-      <div id="cb-reopen-msg"></div>`;
+  // Admin sees both buttons always; accountant sees only the relevant one
+  document.getElementById('cb-close-card').style.display = (canWrite && (!isClosed || isAdmin)) ? 'block' : 'none';
+  document.getElementById('cb-reopen-card').style.display = (canWrite && (isClosed || isAdmin)) ? 'block' : 'none';
+  if (canWrite) {
+    if (isClosed) {
+      document.getElementById('cb-reopen-card').querySelector('.card-body').innerHTML = `
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Closed ${day.closedAt ? new Date(day.closedAt).toLocaleString() : ''}. Action taken: <strong>${day.bankAction==='bank'?'Banked':'Carried forward'}</strong>.</div>
+        <button class="btn btn-ghost" style="width:100%" onclick="cbPromptReopen()">&#8635; Reopen Day</button>
+        <div id="cb-reopen-msg"></div>`;
+    } else if (isAdmin && document.getElementById('cb-reopen-card').style.display !== 'none') {
+      document.getElementById('cb-reopen-card').querySelector('.card-body').innerHTML = `
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Day is currently open.</div>`;
+    }
   }
 
   await renderCashbookPastDays();
@@ -1355,6 +1437,7 @@ function payrollTab(t) {
   document.getElementById('pt-' + t).classList.add('active');
   if (t === 'advance') { populateAdvStaff(); renderAdvOutstanding(); }
   if (t === 'history') { populatePayHistoryStaff(); renderPayHistory(); }
+  if (t === 'payslip') { document.getElementById('pr-year').value = new Date().getFullYear(); }
 }
 
 // ============================================================
@@ -2368,8 +2451,256 @@ function renderDashboard() {
 }
 
 // ============================================================
-// REPORTS
+// PRINT HELPERS
 // ============================================================
+function schoolLetterhead() {
+  return `<div style="text-align:center;margin-bottom:16px;border-bottom:3px solid #8A191C;padding-bottom:12px">
+    <div style="font-size:20px;font-weight:700;color:#8A191C">St. Edward's Memorial Junior School</div>
+    <div style="font-size:13px;color:#555;margin-top:2px">STEM Management System — Financial Report</div>
+    <div style="font-size:11px;color:#888;margin-top:2px">Printed: ${new Date().toLocaleString('en-GB')}</div>
+  </div>`;
+}
+function openPrintWindow(html) {
+  const w = window.open('', '_blank', 'width=900,height=700');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Report</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:24px;background:#fff}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{border:1px solid #ccc;padding:5px 8px;text-align:left}
+    th{background:#f0f0f0;font-weight:700}
+    .td-right{text-align:right}
+    .total-row{font-weight:700;background:#f9f9f9}
+    .section{margin-top:20px}
+    .sign-area{margin-top:50px;display:flex;gap:80px}
+    .sign-line{border-top:1px solid #000;width:180px;padding-top:4px;font-size:11px;color:#555}
+    h2{color:#8A191C;margin:0 0 4px}
+    h3{color:#333;margin:12px 0 6px}
+    @media print{body{margin:12px}.no-print{display:none}}
+  </style></head><body>
+  <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 20px;background:#8A191C;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px">🖨 Print</button>
+  ${html}</body></html>`);
+  w.document.close();
+}
+
+// ── School Fees Report (all students) ──
+function printFeesReport() {
+  const rows = DB.students.map(s => {
+    const paid = getPaid(s.id);
+    const bal = Math.max(0, s.expected - paid);
+    return { name: s.name, cls: s.class, expected: s.expected, paid, bal };
+  }).sort((a,b) => a.cls.localeCompare(b.cls) || a.name.localeCompare(b.name));
+  const totExp = rows.reduce((t,r)=>t+r.expected,0);
+  const totPaid = rows.reduce((t,r)=>t+r.paid,0);
+  const totBal = rows.reduce((t,r)=>t+r.bal,0);
+  const html = schoolLetterhead() + `
+    <h2>School Fees Collection Report</h2>
+    <table>
+      <thead><tr><th>#</th><th>Student</th><th>Class</th><th class="td-right">Expected (UGX)</th><th class="td-right">Paid (UGX)</th><th class="td-right">Balance (UGX)</th></tr></thead>
+      <tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.cls}</td><td class="td-right">${r.expected.toLocaleString()}</td><td class="td-right">${r.paid.toLocaleString()}</td><td class="td-right" style="${r.bal>0?'color:red;font-weight:700':''}">${r.bal>0?r.bal.toLocaleString():'✓ Paid'}</td></tr>`).join('')}</tbody>
+      <tfoot><tr class="total-row"><td colspan="3">TOTALS (${rows.length} students)</td><td class="td-right">${totExp.toLocaleString()}</td><td class="td-right">${totPaid.toLocaleString()}</td><td class="td-right" style="color:red">${totBal.toLocaleString()}</td></tr></tfoot>
+    </table>
+    <div class="sign-area">
+      <div class="sign-line">Prepared by: ___________________</div>
+      <div class="sign-line">Authorized by: ___________________</div>
+    </div>`;
+  openPrintWindow(html);
+}
+
+// ── School Fees Report by Class ──
+function printFeesByClassReport() {
+  const byClass = {};
+  DB.students.forEach(s => {
+    if (!byClass[s.class]) byClass[s.class] = [];
+    const paid = getPaid(s.id);
+    byClass[s.class].push({ name: s.name, expected: s.expected, paid, bal: Math.max(0, s.expected - paid) });
+  });
+  let html = schoolLetterhead() + '<h2>School Fees by Class</h2>';
+  Object.keys(byClass).sort().forEach(cls => {
+    const students = byClass[cls].sort((a,b)=>a.name.localeCompare(b.name));
+    const totExp = students.reduce((t,r)=>t+r.expected,0);
+    const totPaid = students.reduce((t,r)=>t+r.paid,0);
+    const totBal = students.reduce((t,r)=>t+r.bal,0);
+    html += `<div class="section"><h3>${cls} (${students.length} students)</h3>
+      <table><thead><tr><th>#</th><th>Student</th><th class="td-right">Expected</th><th class="td-right">Paid</th><th class="td-right">Balance</th></tr></thead>
+      <tbody>${students.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td class="td-right">${r.expected.toLocaleString()}</td><td class="td-right">${r.paid.toLocaleString()}</td><td class="td-right" style="${r.bal>0?'color:red;font-weight:700':''}">${r.bal>0?r.bal.toLocaleString():'✓'}</td></tr>`).join('')}</tbody>
+      <tfoot><tr class="total-row"><td colspan="2">Class Total</td><td class="td-right">${totExp.toLocaleString()}</td><td class="td-right">${totPaid.toLocaleString()}</td><td class="td-right" style="color:red">${totBal.toLocaleString()}</td></tr></tfoot>
+      </table></div>`;
+  });
+  html += `<div class="sign-area"><div class="sign-line">Prepared by: ___________________</div><div class="sign-line">Authorized by: ___________________</div></div>`;
+  openPrintWindow(html);
+}
+
+// ── Sundry Income Print Report ──
+function printSundryReportPrint() {
+  const stream = document.getElementById('rpt-oi-stream') ? document.getElementById('rpt-oi-stream').value : '';
+  const from = document.getElementById('rpt-oi-from') ? document.getElementById('rpt-oi-from').value : '';
+  const to = document.getElementById('rpt-oi-to') ? document.getElementById('rpt-oi-to').value : '';
+  let rows = stream ? DB.otherIncome.filter(r => r.stream === stream) : [...DB.otherIncome];
+  rows = _filterByDateRange(rows, 'date', from, to).sort((a,b)=>b.date.localeCompare(a.date));
+  if (!rows.length) { alert('No records for the selected filters.'); return; }
+  const total = rows.reduce((t,r)=>t+r.amt,0);
+  const html = schoolLetterhead() + `
+    <h2>Sundry Income Report${stream?' — '+stream:''}</h2>
+    ${from||to?`<div style="font-size:11px;color:#666;margin-bottom:8px">Period: ${from||'start'} to ${to||'today'}</div>`:''}
+    <table>
+      <thead><tr><th>Date</th><th>Stream</th><th>Student</th><th>Receipt #</th><th>Note</th><th class="td-right">Amount (UGX)</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.date}</td><td>${r.stream}</td><td>${r.studentName||'—'}</td><td>${r.rcptNo||'—'}</td><td>${r.note||'—'}</td><td class="td-right">${r.amt.toLocaleString()}</td></tr>`).join('')}</tbody>
+      <tfoot><tr class="total-row"><td colspan="5">TOTAL (${rows.length} entries)</td><td class="td-right">${total.toLocaleString()}</td></tr></tfoot>
+    </table>
+    <div class="sign-area"><div class="sign-line">Prepared by: ___________________</div><div class="sign-line">Authorized by: ___________________</div></div>`;
+  openPrintWindow(html);
+}
+
+// ── Student Financial Statement ──
+function renderStudentStatement() {
+  const sel = document.getElementById('rpt-stu-sel');
+  const stuId = sel ? sel.value : '';
+  const el = document.getElementById('rpt-stu-preview');
+  if (!stuId) { if(el) el.innerHTML = '<div class="empty" style="padding:12px">Please select a student.</div>'; return; }
+  const stu = DB.students.find(s => s.id === stuId);
+  if (!stu) return;
+  const paid = getPaid(stuId);
+  const feeBal = Math.max(0, stu.expected - paid);
+  const feeReceipts = DB.feeReceipts.filter(r => r.studentId === stuId).sort((a,b)=>b.date.localeCompare(a.date));
+  const sundry = DB.otherIncome.filter(r => r.studentId === stuId).sort((a,b)=>b.date.localeCompare(a.date));
+  const sundryByStream = {};
+  sundry.forEach(r => { if(!sundryByStream[r.stream]) sundryByStream[r.stream]=0; sundryByStream[r.stream]+=r.amt; });
+  if(el) el.innerHTML = `<div style="padding:12px;background:var(--bg);border-radius:var(--radius-sm);font-size:13px">
+    <strong>${stu.name}</strong> — ${stu.class}<br>
+    <span style="color:var(--text3)">Fees: paid UGX ${fmt(paid)} / UGX ${fmt(stu.expected)} expected${feeBal>0?' — <span style="color:var(--red)">UGX '+fmt(feeBal)+' outstanding</span>':' — <span style="color:var(--green)">✓ Fully paid</span>'}</span><br>
+    <span style="color:var(--text3)">Sundry payments: ${sundry.length} entries</span>
+    <div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="printStudentStatement()">🖨 Print Statement</button></div>
+  </div>`;
+}
+function printStudentStatement() {
+  const sel = document.getElementById('rpt-stu-sel');
+  const stuId = sel ? sel.value : '';
+  if (!stuId) { alert('Please select a student first.'); return; }
+  const stu = DB.students.find(s => s.id === stuId);
+  if (!stu) return;
+  const paid = getPaid(stuId);
+  const feeBal = Math.max(0, stu.expected - paid);
+  const feeReceipts = DB.feeReceipts.filter(r => r.studentId === stuId).sort((a,b)=>b.date.localeCompare(a.date));
+  const sundry = DB.otherIncome.filter(r => r.studentId === stuId).sort((a,b)=>b.date.localeCompare(a.date));
+  const sundryByStream = {};
+  sundry.forEach(r => { if(!sundryByStream[r.stream]) sundryByStream[r.stream]=0; sundryByStream[r.stream]+=r.amt; });
+  let html = schoolLetterhead() + `
+    <h2>Student Financial Statement</h2>
+    <div style="margin-bottom:14px;padding:10px;border:1px solid #ccc;border-radius:4px">
+      <strong>Name:</strong> ${stu.name} &nbsp;&nbsp; <strong>Class:</strong> ${stu.class}
+    </div>
+    <h3>School Fees</h3>
+    <table>
+      <thead><tr><th>Date</th><th>Receipt #</th><th>Method</th><th>Note</th><th class="td-right">Amount (UGX)</th></tr></thead>
+      <tbody>${feeReceipts.length ? feeReceipts.map(r=>`<tr><td>${r.date}</td><td>${r.rcptNo||'—'}</td><td>${r.method}</td><td>${r.note||'—'}</td><td class="td-right">${r.amt.toLocaleString()}</td></tr>`).join('') : '<tr><td colspan="5" style="color:#999;text-align:center">No fee payments recorded</td></tr>'}</tbody>
+      <tfoot>
+        <tr class="total-row"><td colspan="4">Total Paid</td><td class="td-right">${paid.toLocaleString()}</td></tr>
+        <tr><td colspan="4">Expected</td><td class="td-right">${stu.expected.toLocaleString()}</td></tr>
+        <tr class="total-row" style="${feeBal>0?'color:red':'color:green'}"><td colspan="4">${feeBal>0?'Outstanding Balance':'Status'}</td><td class="td-right">${feeBal>0?feeBal.toLocaleString():'✓ Fully Paid'}</td></tr>
+      </tfoot>
+    </table>`;
+  if (sundry.length) {
+    html += `<h3 style="margin-top:20px">Sundry Payments</h3>
+    <table>
+      <thead><tr><th>Date</th><th>Stream</th><th>Receipt #</th><th>Note</th><th class="td-right">Amount (UGX)</th></tr></thead>
+      <tbody>${sundry.map(r=>`<tr><td>${r.date}</td><td>${r.stream}</td><td>${r.rcptNo||'—'}</td><td>${r.note||'—'}</td><td class="td-right">${r.amt.toLocaleString()}</td></tr>`).join('')}</tbody>
+    </table>
+    <h3 style="margin-top:14px">Sundry Summary by Stream</h3>
+    <table><thead><tr><th>Stream</th><th class="td-right">Total Paid (UGX)</th></tr></thead>
+    <tbody>${Object.entries(sundryByStream).map(([s,a])=>`<tr><td>${s}</td><td class="td-right">${a.toLocaleString()}</td></tr>`).join('')}</tbody>
+    </table>`;
+  } else {
+    html += `<div style="margin-top:14px;color:#999;font-size:12px">No sundry payments recorded for this student.</div>`;
+  }
+  html += `<div class="sign-area"><div class="sign-line">Prepared by: ___________________</div><div class="sign-line">Date: ___________________</div></div>`;
+  openPrintWindow(html);
+}
+
+// ── Payroll Sheet & Authorization ──
+let _payrollSheetData = []; // cached for authorization
+function renderPayrollSheet() {
+  const month = document.getElementById('pr-month').value;
+  const year = document.getElementById('pr-year').value;
+  const el = document.getElementById('pr-preview');
+  const authSection = document.getElementById('pr-auth-section');
+  if (!DB.staff.length) { el.innerHTML = '<div class="empty">No staff records found.</div>'; return; }
+  // Check who already got paid this month/year
+  const alreadyPaid = new Set(DB.salaryPayments.filter(p => p.month === month + ' ' + year).map(p => p.staffId));
+  _payrollSheetData = DB.staff.map(s => {
+    const advOutstanding = DB.advances.filter(a => a.staffId === s.id && !a.repaid).reduce((t,a)=>t+a.amt,0);
+    const advDeduct = advOutstanding > 0 ? Math.min(Math.round(advOutstanding / 2), s.salary * 0.5) : 0;
+    const net = s.salary - advDeduct;
+    return { ...s, advDeduct, net, alreadyPaid: alreadyPaid.has(s.id) };
+  });
+  const totGross = _payrollSheetData.reduce((t,s)=>t+s.salary,0);
+  const totDeduct = _payrollSheetData.reduce((t,s)=>t+s.advDeduct,0);
+  const totNet = _payrollSheetData.reduce((t,s)=>t+s.net,0);
+  el.innerHTML = `<div style="font-size:13px;font-weight:700;margin-bottom:8px">Payroll — ${month} ${year}</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>#</th><th>Name</th><th>Role</th><th class="td-right">Gross (UGX)</th><th class="td-right">Adv. Deducted</th><th class="td-right">Net Pay (UGX)</th><th>Status</th></tr></thead>
+      <tbody>${_payrollSheetData.map((s,i)=>`<tr style="${s.alreadyPaid?'color:#999':''}"><td>${i+1}</td><td><strong>${s.name}</strong></td><td>${s.role}</td><td class="td-right">${fmt(s.salary)}</td><td class="td-right">${s.advDeduct>0?fmt(s.advDeduct):'—'}</td><td class="td-right" style="font-weight:700">${fmt(s.net)}</td><td>${s.alreadyPaid?'<span class="badge badge-ok">✓ Paid</span>':'<span class="badge badge-over">Pending</span>'}</td></tr>`).join('')}</tbody>
+      <tfoot><tr style="font-weight:700;background:var(--bg)"><td colspan="3">TOTAL (${_payrollSheetData.length} staff)</td><td class="td-right">UGX ${fmt(totGross)}</td><td class="td-right">UGX ${fmt(totDeduct)}</td><td class="td-right">UGX ${fmt(totNet)}</td><td></td></tr></tfoot>
+    </table></div>`;
+  document.getElementById('pr-auth-date').value = today();
+  authSection.style.display = 'block';
+}
+
+function printPayrollReport() {
+  const month = document.getElementById('pr-month') ? document.getElementById('pr-month').value : '';
+  const year = document.getElementById('pr-year') ? document.getElementById('pr-year').value : '';
+  if (!_payrollSheetData.length && DB.staff.length) renderPayrollSheet();
+  const data = _payrollSheetData.length ? _payrollSheetData : DB.staff.map(s => ({ ...s, advDeduct: 0, net: s.salary, alreadyPaid: false }));
+  const totGross = data.reduce((t,s)=>t+s.salary,0);
+  const totDeduct = data.reduce((t,s)=>t+s.advDeduct,0);
+  const totNet = data.reduce((t,s)=>t+s.net,0);
+  const html = schoolLetterhead() + `
+    <h2>Monthly Payroll — ${month} ${year}</h2>
+    <table>
+      <thead><tr><th>#</th><th>Name</th><th>Role</th><th class="td-right">Gross (UGX)</th><th class="td-right">Advance Deducted</th><th class="td-right">Net Pay (UGX)</th><th>Signature</th></tr></thead>
+      <tbody>${data.map((s,i)=>`<tr style="height:32px"><td>${i+1}</td><td>${s.name}</td><td>${s.role}</td><td class="td-right">${s.salary.toLocaleString()}</td><td class="td-right">${s.advDeduct>0?s.advDeduct.toLocaleString():'—'}</td><td class="td-right"><strong>${s.net.toLocaleString()}</strong></td><td></td></tr>`).join('')}</tbody>
+      <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td class="td-right">${totGross.toLocaleString()}</td><td class="td-right">${totDeduct.toLocaleString()}</td><td class="td-right">${totNet.toLocaleString()}</td><td></td></tr></tfoot>
+    </table>
+    <div class="sign-area" style="margin-top:40px">
+      <div class="sign-line">Prepared by: ___________________</div>
+      <div class="sign-line">Authorized by: ___________________</div>
+      <div class="sign-line">Date: ___________________</div>
+    </div>`;
+  openPrintWindow(html);
+}
+
+async function authorizePayroll() {
+  const month = document.getElementById('pr-month').value;
+  const year = document.getElementById('pr-year').value;
+  const date = document.getElementById('pr-auth-date').value || today();
+  const method = document.getElementById('pr-auth-method').value;
+  const msg = document.getElementById('pr-auth-msg');
+  const pending = _payrollSheetData.filter(s => !s.alreadyPaid);
+  if (!pending.length) { msg.innerHTML = '<div class="msg msg-warn">All staff for this month have already been paid.</div>'; return; }
+  if (!confirm(`Authorize payment for ${pending.length} staff member(s) for ${month} ${year}? This will record ${pending.length} salary payments in the system.`)) return;
+  msg.innerHTML = '<div class="msg msg-warn">Recording payments\u2026</div>';
+  let errors = 0;
+  for (const s of pending) {
+    try {
+      const row = await sbInsert('salary_payments', {
+        staff_id: s.id, month: month + ' ' + year, payment_date: date,
+        gross: s.salary, advance_deducted: s.advDeduct, net: s.net, method,
+      });
+      DB.salaryPayments.push(mapSalaryPayment(row));
+      await cbLogExpense(date, 'Salary — ' + s.name + ' (' + month + ' ' + year + ')', s.net, method, '');
+    } catch (e) {
+      console.error('Payroll auth error for', s.name, e.message);
+      errors++;
+    }
+  }
+  await refreshCashbookTotals(date);
+  save(); renderPayHistory(); updateStats();
+  if (errors) {
+    msg.innerHTML = `<div class="msg msg-warn">&#9888; ${pending.length - errors} paid, ${errors} failed. Check console for details.</div>`;
+  } else {
+    msg.innerHTML = `<div class="msg msg-ok">&#10003; ${pending.length} salary payments recorded for ${month} ${year}.</div>`;
+    renderPayrollSheet(); // refresh to show all as paid
+  }
+}
 function renderReports() {
   const income = totalIncome(), expenses = totalExpenses(), bal = income - expenses;
   const feeIncome = DB.feeReceipts.reduce((t,r)=>t+r.amt,0);
@@ -2431,6 +2762,13 @@ function renderReports() {
   const exCats = [...new Set(DB.expenses.map(r => r.cat))].sort();
   const exSel = document.getElementById('rpt-ex-cat');
   if (exSel) exSel.innerHTML = '<option value="">-- All categories --</option>' + exCats.map(c => `<option value="${c}">${c}</option>`).join('');
+
+  // Populate student statement dropdown
+  const stuSel = document.getElementById('rpt-stu-sel');
+  if (stuSel) {
+    const sorted = [...DB.students].sort((a,b)=>a.name.localeCompare(b.name));
+    stuSel.innerHTML = '<option value="">-- Select student --</option>' + sorted.map(s=>`<option value="${s.id}">${s.name} (${s.class})</option>`).join('');
+  }
 }
 
 function _filterByDateRange(records, dateField, from, to) {
@@ -2772,34 +3110,22 @@ sb.auth.onAuthStateChange(async (event, session) => {
     applyRolePermissions();
     resetIdleTimer();
     if (isFirstLoad) {
-      // Attempt loadAll up to 2 times before showing an error.
-      // A 20-second timeout is too short on slow connections — bumped to 45s.
-      // On the first timeout we silently retry once rather than surfacing a
-      // scary red banner that still lets edits through (confusing UX).
-      let loadErr = null;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          await withTimeout(loadAll(), 45000, 'Loading data timed out.');
-          loadErr = null;
-          break;
-        } catch (e) {
-          loadErr = e;
-          console.warn('loadAll attempt ' + attempt + ' failed:', e.message);
-          if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
-        }
-      }
-      if (loadErr) {
-        console.error('loadAll failed after retries:', loadErr.message);
-        showPageError('dashboard', loadErr);
-      } else {
+      // Show a loading indicator while data loads — no timeout that can cause
+      // a false error banner. On a slow connection we just wait patiently.
+      const dashEl = document.getElementById('page-dashboard');
+      if (dashEl) dashEl.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px"><div style="width:40px;height:40px;border:4px solid var(--border2);border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="color:var(--text3);font-size:14px">Loading your data\u2026</div></div>';
+      try {
+        await loadAll();
         renderDashboard();
-        // Pre-populate all staff dropdowns so they're ready before the user
-        // navigates — especially important for the Allowances page picker.
         populateAllowanceStaffPicker();
         populateAllowanceStaffFilter();
         populatePayrollStaff();
         populateAdvStaff();
         populatePayHistoryStaff();
+      } catch (e) {
+        console.error('loadAll failed:', e.message);
+        // Only show error if it's a genuine Supabase error, not a timeout
+        if (dashEl) dashEl.innerHTML = '<div class="card" style="margin:24px;padding:24px;border-left:4px solid var(--red)"><div style="font-weight:700;color:var(--red);margin-bottom:8px">&#9888; Could not load data</div><div style="font-size:13px;color:var(--text3);margin-bottom:16px">' + (e.message || 'Unknown error') + '</div><button class="btn btn-primary" onclick="location.reload()">&#8635; Reload Page</button></div>';
       }
     }
   } else {
