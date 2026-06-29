@@ -149,6 +149,7 @@ tfoot td{font-weight:700;background:#F8FAFC;border-top:2px solid var(--border)}
 .modal-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1}
 .modal-close:hover{background:rgba(255,255,255,.3)}
 .modal-body{padding:18px 20px}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 @media print{
   .sidebar,.topbar,.no-print,.tab-bar,.toolbar,.btn:not(.print-show),#cb-close-card,#cb-reopen-card,#readonly-banner{display:none!important}
@@ -3110,12 +3111,16 @@ sb.auth.onAuthStateChange(async (event, session) => {
     applyRolePermissions();
     resetIdleTimer();
     if (isFirstLoad) {
-      // Show a loading indicator while data loads — no timeout that can cause
-      // a false error banner. On a slow connection we just wait patiently.
-      const dashEl = document.getElementById('page-dashboard');
-      if (dashEl) dashEl.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px"><div style="width:40px;height:40px;border:4px solid var(--border2);border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="color:var(--text3);font-size:14px">Loading your data\u2026</div></div>';
+      // Show a loading overlay while data loads — never overwrite page HTML
+      const spinner = document.createElement('div');
+      spinner.id = 'load-spinner';
+      spinner.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(255,255,255,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px';
+      spinner.innerHTML = '<div style="width:40px;height:40px;border:4px solid #e5e7eb;border-top-color:#8A191C;border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="color:#6b7280;font-size:14px">Loading your data\u2026</div>';
+      document.body.appendChild(spinner);
       try {
         await loadAll();
+        spinner.remove();
+        applyRolePermissions(); // re-apply now that profile is confirmed
         renderDashboard();
         populateAllowanceStaffPicker();
         populateAllowanceStaffFilter();
@@ -3123,9 +3128,9 @@ sb.auth.onAuthStateChange(async (event, session) => {
         populateAdvStaff();
         populatePayHistoryStaff();
       } catch (e) {
+        spinner.remove();
         console.error('loadAll failed:', e.message);
-        // Only show error if it's a genuine Supabase error, not a timeout
-        if (dashEl) dashEl.innerHTML = '<div class="card" style="margin:24px;padding:24px;border-left:4px solid var(--red)"><div style="font-weight:700;color:var(--red);margin-bottom:8px">&#9888; Could not load data</div><div style="font-size:13px;color:var(--text3);margin-bottom:16px">' + (e.message || 'Unknown error') + '</div><button class="btn btn-primary" onclick="location.reload()">&#8635; Reload Page</button></div>';
+        showPageError('dashboard', e);
       }
     }
   } else {
